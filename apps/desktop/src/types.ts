@@ -42,3 +42,10 @@ export type ThemeMode = "system" | "light" | "dark";
 export type ExportFormat = "pdf" | "epub" | "markdown";
 
 export type SettingsMap = Record<string, unknown>;
+
+export interface EngineStatus {
+  ready: boolean;
+  engine_version: string;
+  python_version: string;
+  error: string | null;
+}

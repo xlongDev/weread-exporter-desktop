@@ -24,10 +24,13 @@
 ```json
 {"protocol_version":1, "cmd":"start_task", "task_id":"task-8f3a",
  "params":{"book_id":"3b13...", "format":"pdf|epub|markdown", "output_dir":"/...",
-           "options":{"save_cover":true,"overwrite":"ask|skip|replace"}}}
+           "options":{"force":false, "skip_crawl":false}}}
 {"protocol_version":1, "cmd":"cancel", "task_id":"task-8f3a"}
 {"protocol_version":1, "cmd":"shutdown"}
 ```
+
+`options.skip_crawl`：数据已在本地时跳过抓取直接导出（书库"重新导出"与断点续导的完成段使用）。
+`WEREAD_ENGINE_MOCK=1`（Rust 侧环境变量）：worker 以 Mock 模式回放事件流，用于协议与 UI 生命周期自动化验证，不代表真实平台导出。
 
 独立命令任务（不占 task 通道长时）：
 - `{"cmd":"auth_check"}` → `auth.status`
@@ -48,8 +51,9 @@
 | `book.metadata` | `book_id,title,author,intro,cover_url,cover_path` | 元数据抓取完成 |
 | `book.validation` | `ok, reason?` | 可访问性校验 |
 | `task.started` | `total_chapters?` | 抓取/导出开始 |
-| `task.progress` | `stage`, `page`, `chapter_title`, `chapters_done`, `words`, `elapsed_sec` | 每页/每章（stage: `auth`/`metadata`/`crawl`/`images`/`render`） |
+| `task.progress` | `stage`, `page`, `chapter_title`, `chapters_done`, `total_chapters`, `words`, `elapsed_sec` | 每页/每章（stage: `auth`/`metadata`/`crawl`/`images`/`render`） |
 | `task.chapter_done` | `chapter_idx`, `title`, `words` | 章节落盘 |
+| `task.output` | `format`, `file_path`, `file_size` | 单个产物文件生成 |
 | `task.completed` | `outputs: [{format,file_path,file_size}]` | 全部产物就绪 |
 | `task.cancelled` | `{}` | 收到 cancel 并优雅停止 |
 | `task.failed` | `code`, `message`, `user_message`, `recoverable` | 失败（唯一用户可读消息字段 user_message） |

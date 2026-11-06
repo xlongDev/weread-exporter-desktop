@@ -2,7 +2,7 @@ use rusqlite::Connection;
 use std::path::Path;
 
 /// 顺序迁移：PRAGMA user_version。新增迁移时在数组尾部追加 (v, sql)。
-const MIGRATIONS: &[(u32, &str)] = &[(1, include_str!("../migrations/0001_init.sql"))];
+pub const MIGRATIONS: &[(u32, &str)] = &[(1, include_str!("../migrations/0001_init.sql"))];
 
 pub const MAX_BACKUPS: usize = 3;
 

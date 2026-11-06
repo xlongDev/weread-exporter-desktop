@@ -1,5 +1,17 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · Phase 3 Python 引擎封装
+
+- **模块**：engine/（平移 + 协议 + 适配器 + 测试），apps/desktop/src-tauri/src/engine/（新），commands.rs，state.rs，lib.rs，run.bat
+- **内容**：
+  - 引擎平移：crawl_weread.py / export_book.py / main.py → engine/，BASE 自适应仓库根，CLI 用法不变；`main()` 增加 progress / should_cancel / output_dir 三个可选参数（默认 None 时行为与原版完全一致）；export 支持格式过滤并返回产物路径列表。
+  - 协议 v1：protocol.py（信封构造 / stdout 固定通道 / stderr 日志 / 损坏行解析）；worker.py（start_task / cancel / auth_check / shutdown / book_info 占位；WEREAD_MOCK=1 脚本回放；sys.stdout→stderr 重定向使引擎 print 变日志且不污染协议通道）。
+  - Rust：protocol.rs（解析 + 未知版本拒绝 + 单测）；worker.rs（Mutex<Child> 句柄 / WEREAD_PYTHON→.venv→系统 python 解析，无硬编码路径）；manager.rs（任务状态机 apply_task_event 可单测；start_task_run 派生 worker + stdout 路由到 Tauri 事件与 SQLite + stderr 落任务日志 + EOF 无终态时收敛 failed/cancelled）；commands 增加 create_task（校验 + books 存在性 + 立即执行）/ cancel_task（运行中优雅取消 / 等待中直接取消）/ engine_status（握手）。
+  - 前端：engine store（握手 + engine://event 订阅）+ 设置-关于真实引擎版本/状态展示。
+- **原因**：Phase 3 交付要求；Rust 管理生命周期、Python 独立运行（用户约束）。
+- **测试**：pytest 25/25（含真实数据导出回归，隔离临时目录）；cargo test 11/11（含 mock 全链路：Rust→真实 python 子进程→事件→SQLite）；clippy 干净；npm build 通过；tauri dev 真机验证页面加载 + 前端握手 + worker 派生。
+- **问题与修复**：①引擎 print 污染协议 stdout → protocol.OUT 固定通道 + worker 重定向；②真实导出回归触发图片补全网络下载阻塞 → start_task 增加 skip_crawl 选项（与书库"重新导出"需求一致）；③裸 cargo build 的嵌入式资产页面不加载（tauri dev 正常）→ 以官方 tauri build 产物为准，记录为已知观察。
+
 ## 2026-11-07 · Phase 2 桌面应用基础工程
 
 - **模块**：apps/desktop/（新建），scripts/dev.sh，.gitignore

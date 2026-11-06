@@ -7,6 +7,7 @@ import { Settings } from "./features/settings/Settings";
 import { useNav } from "./stores/nav";
 import { applyTheme, watchSystemTheme } from "./stores/theme";
 import { useSettings } from "./stores/settings";
+import { useEngine, initEngineListener } from "./stores/engine";
 
 function CurrentPage() {
   const page = useNav((s) => s.page);
@@ -23,6 +24,12 @@ function CurrentPage() {
 }
 
 export default function App() {
+  // 启动时：引擎握手 + 订阅引擎事件流
+  useEffect(() => {
+    void useEngine.getState().refresh();
+    void initEngineListener();
+  }, []);
+
   // 系统主题变化时按当前模式重算（mode=system 需要）
   useEffect(
     () =>
