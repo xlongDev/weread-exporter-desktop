@@ -1,5 +1,10 @@
 # TODO
 
+## 全部完成（Phase 0-9，2026-11-07）
+
+剩余事项见 docs/PROJECT_STATUS.md「待人工验收」与 docs/14-known-limitations.md。
+
+## 历史清单
 ## Phase 1（进行中）
 - [ ] 04-product-requirements.md
 - [ ] 05-user-flows.md

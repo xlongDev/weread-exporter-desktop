@@ -106,12 +106,23 @@ pub fn resolve_python(engine_root: &Path) -> String {
     } else {
         ".venv/bin/python"
     };
-    let venv = engine_root
-        .parent()
+    let base = engine_root.parent();
+    let venv = base
         .map(|p| p.join(rel))
         .unwrap_or_else(|| PathBuf::from(rel));
     if venv.is_file() {
         return venv.to_string_lossy().into_owned();
+    }
+    // 打包模式：资源目录下的独立 Python 运行时（scripts/prepare-runtime.sh 组装）
+    if let Some(base) = base {
+        let bundled = if cfg!(windows) {
+            base.join("runtime/python/python.exe")
+        } else {
+            base.join("runtime/bin/python3")
+        };
+        if bundled.is_file() {
+            return bundled.to_string_lossy().into_owned();
+        }
     }
     if cfg!(windows) {
         "python".into()
