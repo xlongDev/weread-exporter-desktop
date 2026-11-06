@@ -22,11 +22,11 @@
 - 路径校验器：白名单前缀、`..`、绝对路径逃逸拒绝。
 - DB 状态机：waiting→running→completed/cancelled/failed 迁移与索引。
 
-## 3. 前端测试（vitest）
+## 3. 前端测试（vitest，已实现 ✅）
 
-- stores：任务状态投影（事件 → store 归并）。
-- services：invoke mock 的错误映射（AppError → 用户文案）。
-- 工具：文件大小/时间格式化、书籍 ID 正则（与引擎规则一致的对齐测试）。
+- utils/bookId：书籍 ID 解析（与引擎 extract_book_id 用例对齐）+ Rust 白名单规则对齐（11 项）。
+- services：toAppError 错误归一（字符串/Error/未知类型）。
+- 运行：`npm run test`（CI 桌面端 job 已接入）。
 
 ## 4. UI 走查（人工 + 脚本辅助）
 
