@@ -4,19 +4,29 @@
 
 ## 当前阶段
 
-**Phase 7 - UI/UX 精细化** → 完成，进入 Phase 8（macOS 打包）
+**Phase 8+9 - 打包与终验** → 完成（Windows 打包待真实 Windows 机器）
+
+## 交付物
+
+- `apps/desktop/src-tauri/target/release/bundle/macos/WeRead Exporter.app`（260MB，自包含）
+- `apps/desktop/src-tauri/target/release/bundle/dmg/WeRead Exporter_0.1.0_aarch64.dmg`（85MB）
+- 全套文档：docs/00~15 + README + CHANGELOG
 
 ## 已完成
 
 - [x] Phase 0~3（详见 DEVELOPMENT_LOG）
 - [x] Phase 4：登录与书籍导入 —— worker login（可见浏览器扫码 300s + 取消）/ book_info（元数据 + 封面下载 + 可访问性校验）；Rust ops 管理（独立事件路由、取消、profile 迁移至应用数据目录）；前端 auth store + 登录卡（等待扫码/超时/取消态）+ 书籍导入页；logout 清除 profile；asset 协议展示封面；真实 Cookie 登录态检测验证通过
+- [x] Phase 8：macOS arm64 打包 —— scripts/prepare-runtime.sh 组装 python-build-standalone 3.12.16 + 锁定版本引擎依赖 + 引擎源码副本进 .app 资源；resolve_python 打包路径探测；自绘书脊应用图标（icns/ico/png 全套）；**独立安装验证通过**（~/Applications 拷贝运行，捆绑 Python 握手 ok）
+- [x] Phase 9：终验清单（docs/12）· 测试报告（docs/13）· 已知限制（docs/14）· 用户手册（docs/15）· README · CHANGELOG
 - [x] Phase 7：动效层（页面淡入 160ms/浮层 140-180ms，prefers-reduced-motion 全降级）；taste-skill 设计门禁 lint 0 FAIL + inspect 0 FAIL（修复：章节状态 unicode 符号→真图标、暗色状态文本对比度提升至 ≥4.5:1、总览下部两栏消除空档）；封面墙悬停操作改描边样式
 - [x] Phase 6：书库（封面墙/列表双视图、搜索、格式筛选、打开文件/定位、删除记录/删除文件带确认、文件缺失提示）；任务详情抽屉（章节级断点进度、任务日志、重试/继续导出→复用断点创建新任务）；应用关闭保护（任务运行时拦截关闭→确认→强制收尾引擎进程后退出）
 - [x] Phase 5：导出向导 4 步（选书→格式多选→选项→确认，登录前置检查）；每格式一个任务 + **任务队列串行执行**（浏览器 profile 单实例约束）；list_tasks 命令；任务中心实时列表（真实进度条/章节/页/字数/耗时、取消、打开输出目录）；真实引擎全链路 Rust 测试（真实 python + 真实书籍数据 → 2 个 Markdown 产物 239KB）+ 队列串行化测试（**发现并修复 route_event DB 锁自死锁**）
 
-## 进行中
+## 待人工验收（见 docs/13 §3）
 
-- [ ] Phase 8：macOS arm64 生产打包（Python 运行时 + engine 资源捆绑进 .app，独立安装验证）→ Windows x64
+- [ ] 真实扫码登录 UI 全流程（需人工扫码）
+- [ ] GUI 内真实书籍完整抓取 + 三格式导出
+- [ ] Windows NSIS 安装包（脚本/icon.ico 就绪，需 Windows 机器）
 
 ## 未完成任务（按阶段）
 

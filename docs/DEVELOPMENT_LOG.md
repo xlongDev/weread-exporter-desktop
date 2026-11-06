@@ -1,5 +1,12 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · Phase 8+9 打包与终验
+
+- **模块**：scripts/prepare-runtime.sh（新增）、scripts/make-icon.py（新增）、tauri.conf.json（资源映射 + 前置命令）、worker.rs（打包运行时解析）、docs/12~15、README、CHANGELOG
+- **内容**：python-build-standalone 3.12.16（aarch64，可重定位）+ requirements.txt 锁定依赖 → 捆绑进 .app/Contents/Resources/runtime；引擎源码副本 → Resources/engine；resolve_python 打包分支；自绘几何书脊图标（纯 stdlib PNG 渲染 + iconutil/ico）。
+- **验收（真实执行）**：正式 .app 页面加载 ✅；**捆绑运行时引擎握手 ok（python 3.12.16，系统为 3.15，证明自包含）** ✅；拷贝至 ~/Applications 独立运行 ✅；DMG 85MB / .app 260MB。
+- **已知限制**：Windows 打包待真实机器；未签名公证；体积主要来自 Playwright 驱动（133MB 刚性）。
+
 ## 2026-11-07 · Phase 7 UI/UX 精细化
 
 - **模块**：styles/index.css（动效 keyframes）、AppShell/Dialog/Drawer（动效类）、tokens.css（暗色 faint 提亮 + negative/warning 正文文本色）、Dashboard（两栏下部）、Tasks/Library（图标与样式修正）

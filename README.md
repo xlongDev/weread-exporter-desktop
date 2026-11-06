@@ -1,96 +1,81 @@
-# 📚 WeRead Book Exporter (`weread-book-exporter`)
+# 📚 WeRead Exporter Desktop
 
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
-[![Playwright](https://img.shields.io/badge/Engine-Playwright-2EAD33.svg)](https://playwright.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+微信读书电子书导出桌面应用 —— 把你在微信读书中**有权阅读**的书籍，无损导出为 **精排 PDF / EPUB / Markdown**，并在本地书库中管理。
 
-将微信读书 Web 端已购或会员书籍**无损抓取全书全文**，并一键导出为 **精排 PDF**、**标准 EPUB** 以及 **纯 Markdown 笔记（适配 Obsidian / Notion）**。
+> 本项目是 [weread-book-exporter](https://github.com/WANGXIN-567/weread-book-exporter)（CLI 版）的桌面化改造：Tauri 2 + React + TypeScript + Rust + Python。GUI 内完成登录、选书、导出、任务管理与书库整理，**无需安装 Python 或命令行**。
 
-自动保留原书的**目录结构、标题层级、引文/重点段落样式与高清插图**，提供舒适的大字号双字体排版，方便个人深度学习、全文检索与知识库归档。
+![preview](assets/preview.png)
 
-<p align="center">
-  <img src="assets/preview.png" alt="WeRead Book Exporter 排版预览" width="100%">
-</p>
+## ✨ 功能
 
----
+- **扫码登录**：弹出浏览器微信扫码，会话保存在本机，随时可退出/清除。
+- **导出向导**：粘贴书籍链接 → 选格式（可多选）→ 选目录 → 确认，四步创建任务。
+- **真实进度**：任务中心实时显示当前章节、页数、字数、耗时 —— 全部来自引擎真实事件，无假进度。
+- **断点续导**：每页逐页落盘；取消/失败后可从断点继续，不从头再来。
+- **本地书库**：封面墙/列表、搜索筛选、打开文件、定位、安全删除（有确认）。
+- **温和抓取**：随机 8~20 秒翻页间隔 + 分段长停顿，保护账号（速度固定，不可调快）。
+- **明暗主题**：浅色 / 深色 / 跟随系统；中文优先界面。
 
-## ✨ 核心特性
+## 📦 下载安装
 
-### 1. 100% 全书完整抓取（攻克网页端翻页漏字问题）
-许多传统的微信读书抓取脚本在默认的上下滚动模式下运行，受限于网页端超长虚拟滚动容器的分片机制，翻页时极易跳过章节下半部分内容。
-- **自动双栏翻页模式**：自动检测并切换至水平双栏模式，逐页完整遍历全书；
-- **精准页面重组**：在底层捕获 Canvas 绘制指令与分栏坐标，精准还原每一页的文本流与段落顺序，杜绝跨页丢字、重复或错乱。
+从 Releases 下载对应平台的安装包：
 
-### 2. 原生级层次还原与断句修复
-- **多级样式识别**：根据画布渲染的字号与字重，自动区分**章节标题、独立引文/核心段落、加粗小标题与普通正文**；
-- **智能断句拼接**：自动修复因页面折行、翻页或插图穿插导致的句子中断，生成连贯自然的自然段；
-- **插图自动下载**：自动提取并下载原书全部高清配图，按阅读顺序内嵌至对应位置。
+| 平台 | 文件 | 状态 |
+| --- | --- | --- |
+| macOS (Apple Silicon) | `WeRead Exporter_x.y.z_aarch64.dmg` | ✅ 已验证 |
+| macOS (Intel) | 待构建（脚本支持） | — |
+| Windows x64 | `WeRead Exporter_x.y.z_x64-setup.exe` | ⏳ 需 Windows 机器构建验收 |
 
-### 3. 一键导出三大常用格式
-| 导出格式 | 适用场景 | 特性说明 |
-| :--- | :--- | :--- |
-| **精排 PDF (`.pdf`)** | iPad 批注、电脑阅读、打印 | **苹方正文 + 楷体引文**大字号排版，内置封面、可点击目录页、PDF 侧边栏书签大纲 (Outline) 与页码 |
-| **标准 EPUB (`.epub`)** | Apple Books / Kindle / 阅读器 | 内嵌多字体排版样式、完整目录导航树与原书高清插图 |
-| **Markdown (`.md`)** | Obsidian / Notion / 个人知识库 | 提供**纯 Markdown 版**（引文自动转为 `>` 引用块）与**带样式标签版**，方便检索与做笔记 |
+macOS 未签名版本首次打开：右键点击应用 → 打开。
 
-### 4. 温和抓取与防频控机制
-- **随机波动翻页**：翻页间隔延长至 8～20 秒动态随机等待，告别机械固定的秒级请求；
-- **分段长停顿保护**：每抓取 10～20 页自动触发 1～2 分钟长停顿，大幅降低服务端接口压力，确保大体量长篇书籍能够稳定平滑跑完全程。
-
----
-
-## 🚀 快速开始
-
-### 1. 安装依赖（国内极速安装，仅需几秒）
+## 🚀 从源码构建
 
 ```bash
-# 克隆仓库
-git clone https://github.com/WANGXIN-567/weread-book-exporter.git
-cd weread-book-exporter
+# 0) 前置：Node 20+、Rust 1.80+、Python 3.10+（仅构建引擎依赖用）
+python -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 
-# 使用国内高速镜像安装依赖（推荐腾讯云或阿里云，稳定不报 403）
-pip install -r requirements.txt -i https://mirrors.cloud.tencent.com/pypi/simple/
-# 备用阿里云镜像：
-# pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+# 1) 前端依赖
+cd apps/desktop && npm install
+
+# 2) 开发模式
+npx tauri dev
+
+# 3) 生产构建（自动组装捆绑 Python 运行时 + 引擎资源）
+npx tauri build
+# 产物：apps/desktop/src-tauri/target/release/bundle/{macos,dmg}/
 ```
 
-> ⚡ **免下载 200MB 浏览器**：代码内置了智能浏览器检测，会自动直接调用电脑自带的 **Microsoft Edge** 或 **Google Chrome**；如果系统未安装上述浏览器，可执行 `playwright install chromium` 补充下载。
+Windows 构建：同一命令（资源脚本自动选 x86_64 运行时），需在 Windows 机器上执行。
 
-### 2. 一键抓取并导出全格式电子书（核心推荐）
-
-直接复制微信读书网页版的完整链接（支持任意已购/会员书籍）：
+## 🧪 测试
 
 ```bash
-# 直接粘贴整条网页链接（或书籍 ID 均可）：
-python main.py https://weread.qq.com/web/reader/3b132980813ab94eeg013129
+.venv/bin/python -m pytest engine/tests -q     # 引擎回归（含真实数据导出）
+cd apps/desktop/src-tauri && cargo test --lib  # 桌面端（含全链路集成）
+cargo clippy -- -D warnings
+cd apps/desktop && npm run build               # tsc strict + vite
 ```
 
-> **提示**：
-> - 首次运行时会自动弹出浏览器窗口，使用微信扫码登录一次即可。
-> - 脚本会自动完成「全书章节遍历 ➔ 原版高清封面下载 ➔ 插图下载 ➔ 精排 PDF 渲染 ➔ 双字体 EPUB 导出 ➔ Markdown 笔记生成」全流程！
-> - 所有文件最终保存在 `output/` 目录下。
+## 🗂 目录结构
 
-*(高级用法：如需分步运行，也可单独执行 `python crawl_weread.py <链接或ID>` 与 `python export_book.py <链接或ID>`)*
-
----
-
-## 🛠️ 工作流程
-
-```mermaid
-flowchart LR
-    A["微信读书网页版\n(自动切换双栏翻页)"] --> B["底层文本与插图捕获\n逐页提取字号/字重/坐标"]
-    B --> C["段落重组与清洗\n合并跨行断句 & 去重"]
-    C --> D["多格式导出引擎\nPDF / EPUB / Markdown"]
+```text
+engine/            # Python 导出引擎（可独立 CLI 运行）
+├── crawl_weread.py / export_book.py / main.py
+├── adapter/worker.py   # 桌面协议 Worker（JSON Lines v1）
+└── tests/              # pytest 回归
+apps/desktop/      # Tauri 2 桌面应用（React + TS + Rust）
+docs/              # 审计/设计/协议/测试/手册等全部文档
+scripts/           # 构建/运行时/图标脚本
 ```
 
----
+## ⚠️ 免责声明
 
-## ⚠️ 免责声明 (Disclaimer)
+1. 本工具仅用于个人学习、读书笔记整理与技术研究。
+2. 请支持正版阅读，仅对您**个人合法拥有阅读权限**的书籍使用本工具，导出的文件请勿用于任何商业用途或公开传播。
+3. 本仓库不包含任何受版权保护的书籍内容或个人登录信息。
 
-1. 本工具仅用于个人学习、读书笔记整理与前端渲染技术研究。
-2. 请支持正版阅读，仅对您个人合法拥有阅读权限的书籍使用本工具，导出的文件请勿用于任何商业用途或公开传播。
-3. 本仓库仅包含通用转换脚本，不包含任何受版权保护的书籍内容或个人登录信息。
+## 📄 许可证
 
----
+MIT License（详见 LICENSE）。桌面化部分同样以 MIT 发布。
 
-如果这个工具对你的阅读与笔记整理有帮助，欢迎点亮一颗 **Star ⭐** 支持！
+如果这个工具对你有帮助，欢迎给原项目点一颗 Star ⭐！
