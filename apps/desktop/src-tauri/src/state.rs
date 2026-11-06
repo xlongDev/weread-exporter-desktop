@@ -1,7 +1,9 @@
+use crate::engine::manager::RunningTask;
 use rusqlite::Connection;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[derive(Serialize, Clone)]
 pub struct AppPaths {
@@ -14,6 +16,8 @@ pub struct AppPaths {
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub paths: AppPaths,
+    /// 正在运行的引擎任务（task_id → 运行句柄）
+    pub running: Mutex<HashMap<i64, Arc<RunningTask>>>,
 }
 
 pub fn paths_of() -> AppPaths {

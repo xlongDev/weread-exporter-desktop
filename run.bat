@@ -17,7 +17,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-"%PY_EXE%" "%~dp0main.py" %*
+"%PY_EXE%" "%~dp0engine\main.py" %*
 
 echo.
 pause

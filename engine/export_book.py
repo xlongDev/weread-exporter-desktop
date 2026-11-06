@@ -24,7 +24,8 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+# 仓库根（engine/ 的上一级）：保持 output/ 与原 CLI 行为完全一致
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FANG_P = re.compile(r'^<p class="fang">(.*)</p>$')
 SENT_END = re.compile(r'[。！？；：…”）》」]$')
 
@@ -114,8 +115,9 @@ def refine_chapter_text(text):
     return res
 
 
-def read_book(book_id):
-    root = os.path.join(BASE, "output", book_id + "_v2")
+def read_book(book_id, output_dir=None):
+    out_root = output_dir if output_dir else os.path.join(BASE, "output")
+    root = os.path.join(out_root, book_id + "_v2")
     ch_dir = os.path.join(root, "chapters")
     head_dir = os.path.join(root, "_head")
     raw_dir = os.path.join(root, "raw")
@@ -128,7 +130,7 @@ def read_book(book_id):
             print(f"🔄 检测到 chapters 章节目录为空，正在从 raw/ 逐页落盘数据 ({len(raw_pages)} 页) 自动恢复章节...")
             try:
                 import crawl_weread
-                rebuilt_cnt = crawl_weread.rebuild_chapters_from_raw(book_id)
+                rebuilt_cnt = crawl_weread.rebuild_chapters_from_raw(book_id, output_dir=output_dir)
                 print(f"✅ 成功从历史落盘记录中重构恢复了 {rebuilt_cnt} 个完整章节！")
             except Exception as e:
                 print(f"⚠️ 自动重构章节提示: {e}")
@@ -157,8 +159,8 @@ def read_book(book_id):
     return root, heads + chaps
 
 
-def build_markdown_files(book_id, title, texts):
-    out_dir = os.path.join(BASE, "output")
+def build_markdown_files(book_id, title, texts, output_dir=None, progress=None):
+    out_dir = output_dir if output_dir else os.path.join(BASE, "output")
     os.makedirs(out_dir, exist_ok=True)
     refined = [refine_chapter_text(t) for t in texts]
 
@@ -177,11 +179,15 @@ def build_markdown_files(book_id, title, texts):
     with open(pure_md_path, "w", encoding="utf-8") as f:
         f.write("\n\n---\n\n".join(pure_chaps))
 
-    print(f"📄 Markdown 笔记生成完成:\n  - {pure_md_path}", flush=True)
-    return pure_md_path
+    outputs = [pure_md_path, html_md_path]
+    for p in outputs:
+        print(f"📄 Markdown 笔记生成完成:\n  - {p}", flush=True)
+        if progress:
+            progress({"kind": "output", "format": "markdown", "path": p, "size": os.path.getsize(p)})
+    return outputs
 
 
-def build_epub(book_id, root, title, author, texts):
+def build_epub(book_id, root, title, author, texts, output_dir=None, progress=None):
     try:
         import markdown
         from ebooklib import epub
@@ -236,9 +242,11 @@ def build_epub(book_id, root, title, author, texts):
     book.spine = ["nav"] + items
 
     safe = re.sub(r'[<>:"/\\|?*]', "_", title) or book_id
-    out_epub = os.path.join(BASE, "output", f"{safe}（双字体精排）.epub")
+    out_epub = os.path.join(output_dir if output_dir else os.path.join(BASE, "output"), f"{safe}（双字体精排）.epub")
     epub.write_epub(out_epub, book)
     print(f"📘 EPUB 电子书生成完成: {out_epub}", flush=True)
+    if progress:
+        progress({"kind": "output", "format": "epub", "path": out_epub, "size": os.path.getsize(out_epub)})
     return out_epub
 
 
@@ -300,7 +308,7 @@ async def launch_browser_headless(p):
     raise RuntimeError("未检测到可用浏览器渲染 PDF，请安装 Google Chrome 或 Microsoft Edge")
 
 
-async def build_pdf(book_id, root, title, author, intro, texts):
+async def build_pdf(book_id, root, title, author, intro, texts, output_dir=None, progress=None):
     img_dir = os.path.join(root, "images")
     cover_path = os.path.join(root, "cover.jpg")
     cover_uri = img_to_data_uri(cover_path)
@@ -409,8 +417,9 @@ p.yw {{
 </html>"""
 
     safe = re.sub(r'[<>:"/\\|?*]', "_", title) or book_id
-    html_path = os.path.join(BASE, "output", f"_temp_{book_id}.html")
-    pdf_path = os.path.join(BASE, "output", f"{safe}（双字体精排）.pdf")
+    out_root = output_dir if output_dir else os.path.join(BASE, "output")
+    html_path = os.path.join(out_root, f"_temp_{book_id}.html")
+    pdf_path = os.path.join(out_root, f"{safe}（双字体精排）.pdf")
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)
 
@@ -440,19 +449,34 @@ p.yw {{
     if os.path.isfile(html_path):
         os.remove(html_path)
     print(f"📕 精排 PDF 生成完成: {pdf_path} ({os.path.getsize(pdf_path) / 1048576:.2f} MB)", flush=True)
+    if progress:
+        progress({"kind": "output", "format": "pdf", "path": pdf_path, "size": os.path.getsize(pdf_path)})
     return pdf_path
 
 
-async def main(book_id_or_url):
+async def main(book_id_or_url, output_dir=None, formats=None, progress=None):
+    """多格式导出入口。
+
+    output_dir: 输出根目录覆盖（None = BASE/output）。
+    formats: 要生成的格式列表（'markdown' | 'epub' | 'pdf'，None = 全部）。
+    progress: 可选回调（kind: stage/output）。返回产物文件路径列表（失败返回 []）。
+    """
+    def _emit(payload):
+        if progress:
+            try:
+                progress(payload)
+            except Exception:
+                pass
+
     book_id = extract_book_id(book_id_or_url)
     if not book_id:
         print("❌ 错误: 未提供有效的书籍 ID 或链接")
-        return False
+        return []
 
-    root, texts = read_book(book_id)
+    root, texts = read_book(book_id, output_dir=output_dir)
     if not texts:
         print(f"❌ 错误: 未找到该书籍已抓取的章节文件，请先运行抓取！(路径: output/{book_id}_v2/chapters/)")
-        return False
+        return []
 
     meta_path = os.path.join(root, "meta.json")
     title = f"Book_{book_id}"
@@ -464,12 +488,24 @@ async def main(book_id_or_url):
             author = m.get("author", "")
             intro = m.get("intro", "")
 
-    print(f"\n📦 开始导出全格式电子书: 《{title}》")
-    build_markdown_files(book_id, title, texts)
-    build_epub(book_id, root, title, author, texts)
-    await build_pdf(book_id, root, title, author, intro, texts)
-    print(f"\n🎉 恭喜！全格式电子书已生成完毕，保存在: output/ 目录\n")
-    return True
+    wanted = formats if formats else ["markdown", "epub", "pdf"]
+    print(f"\n📦 开始导出电子书: 《{title}》 -> {', '.join(wanted)}")
+    outputs = []
+    if "markdown" in wanted:
+        _emit({"kind": "stage", "stage": "render", "format": "markdown"})
+        outputs.extend(build_markdown_files(book_id, title, texts, output_dir=output_dir, progress=_emit))
+    if "epub" in wanted:
+        _emit({"kind": "stage", "stage": "render", "format": "epub"})
+        p = build_epub(book_id, root, title, author, texts, output_dir=output_dir, progress=_emit)
+        if p:
+            outputs.append(p)
+    if "pdf" in wanted:
+        _emit({"kind": "stage", "stage": "render", "format": "pdf"})
+        p = await build_pdf(book_id, root, title, author, intro, texts, output_dir=output_dir, progress=_emit)
+        if p:
+            outputs.append(p)
+    print(f"\n🎉 电子书已生成完毕，保存在: {output_dir if output_dir else os.path.join(BASE, 'output')}\n")
+    return outputs
 
 
 if __name__ == "__main__":

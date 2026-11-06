@@ -29,7 +29,8 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+# 仓库根（engine/ 的上一级）：保持 output/ cache/ 与原 CLI 行为完全一致
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 USER_DATA_DIR = os.environ.get("WEREAD_PROFILE", os.path.join(BASE, "cache", "browser_profile"))
 
 # 翻页节奏配置：温和防风控
@@ -62,12 +63,13 @@ def save_crawl_state(book_dir, state):
         print(f"⚠️ 保存状态失败: {e}")
 
 
-def rebuild_chapters_from_raw(book_id):
+def rebuild_chapters_from_raw(book_id, output_dir=None):
     """
     从 raw/page_*.json 中恢复并重新生成所有章节 chapters/*.md 与 raw/chap_*.json
     即使爬取过程异常终止，也可完整抢救出所有已捕获的章节内容。
     """
-    book_dir = os.path.join(BASE, "output", book_id + "_v2")
+    out_root = output_dir if output_dir else os.path.join(BASE, "output")
+    book_dir = os.path.join(out_root, book_id + "_v2")
     raw_dir = os.path.join(book_dir, "raw")
     md_dir = os.path.join(book_dir, "chapters")
     os.makedirs(md_dir, exist_ok=True)
@@ -501,13 +503,28 @@ async def launch_browser_context(p, user_data_dir, headless=False):
     raise RuntimeError(f"未能启动浏览器 ({last_err})。请安装 Google Chrome 或 Microsoft Edge，或执行: playwright install chromium")
 
 
-async def main(book_id_or_url, force=False):
+async def main(book_id_or_url, force=False, progress=None, should_cancel=None, output_dir=None):
+    """抓取主入口。
+
+    progress: 可选回调，接收进度 dict（kind: auth_required/auth_success/stage/catalog/page/chapter），
+              默认 None 时行为与原 CLI 完全一致。
+    should_cancel: 可选取消探测函数，在翻页边界与登录轮询处检查；取消时保存状态并优雅退出。
+    output_dir: 可选输出根目录覆盖（None = BASE/output）。
+    """
+    def _emit(payload):
+        if progress:
+            try:
+                progress(payload)
+            except Exception:
+                pass
+
     book_id = extract_book_id(book_id_or_url)
     if not book_id:
         print("❌ 错误: 未能解析出有效的微信读书书籍 ID 或链接")
         return False
 
-    book_dir = os.path.join(BASE, "output", book_id + "_v2")
+    out_root = output_dir if output_dir else os.path.join(BASE, "output")
+    book_dir = os.path.join(out_root, book_id + "_v2")
     md_dir = os.path.join(book_dir, "chapters")
     raw_dir = os.path.join(book_dir, "raw")
     img_dir = os.path.join(book_dir, "images")
@@ -524,7 +541,7 @@ async def main(book_id_or_url, force=False):
     # 1. 自愈检查：若存在 raw 页面落盘但 chapters 为空，自动重构
     if not existing_mds and raw_pages:
         print(f"🔄 检测到存在历史逐页落盘数据 ({len(raw_pages)} 页)，正在恢复章节数据...")
-        rebuild_chapters_from_raw(book_id)
+        rebuild_chapters_from_raw(book_id, output_dir=output_dir)
         existing_mds = sorted([f for f in os.listdir(md_dir) if f.endswith(".md")])
         state = get_crawl_state(book_dir)
 
@@ -550,12 +567,18 @@ async def main(book_id_or_url, force=False):
 
         # 登录判定：严格使用 Cookie 凭证
         if not await check_cookies_login(ctx):
+            _emit({"kind": "auth_required"})
             print("\n" + "="*55)
             print("👉 检测到未登录或登录已过期，请在浏览器中使用【微信扫码】（限时 300 秒）...")
             print("="*55 + "\n", flush=True)
             for sec in range(1, 151):
                 await asyncio.sleep(2)
+                if should_cancel and should_cancel():
+                    print("⏹ 收到取消指令，登录等待终止。", flush=True)
+                    await ctx.close()
+                    return False
                 if await check_cookies_login(ctx):
+                    _emit({"kind": "auth_success"})
                     print("✅ 登录成功，继续执行抓取...", flush=True)
                     break
             else:
@@ -584,6 +607,8 @@ async def main(book_id_or_url, force=False):
         meta_file = os.path.join(book_dir, "meta.json")
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump(book_meta, f, ensure_ascii=False, indent=2)
+
+        _emit({"kind": "stage", "stage": "metadata", "title": book_meta.get("title", ""), "author": book_meta.get("author", "")})
 
         print(f"📚 书名: {book_meta.get('title')}")
         if book_meta.get("author"):
@@ -615,6 +640,7 @@ async def main(book_id_or_url, force=False):
                 catalog.append(txt)
         with open(os.path.join(book_dir, "_catalog.json"), "w", encoding="utf-8") as f:
             json.dump(catalog, f, ensure_ascii=False, indent=2)
+        _emit({"kind": "catalog", "total_chapters": n})
         print(f"📑 目录共 {n} 项: {catalog[:3]} ... {catalog[-2:] if n > 3 else ''}", flush=True)
 
         # 断点续传智能计算：匹配已完成的章节
@@ -694,7 +720,12 @@ async def main(book_id_or_url, force=False):
 
         print(f"\n🚀 开始遍历抓取页面 (从第 {start_step} 页开始)...", flush=True)
 
+        cancelled = False
         for step in range(start_step, start_step + 5000):
+            if should_cancel and should_cancel():
+                print("⏹ 收到取消指令，正在安全停止（已抓取内容已落盘）...", flush=True)
+                cancelled = True
+                break
             if step > start_step:
                 await page.mouse.click(600, 450)
                 await page.keyboard.press("ArrowRight")
@@ -755,6 +786,7 @@ async def main(book_id_or_url, force=False):
                             with open(os.path.join(raw_dir, "chap_%04d.json" % saved_idx), "w", encoding="utf-8") as f:
                                 json.dump({"title": cur_title, "images": im_list, "text_len": txt_len}, f, ensure_ascii=False)
                             print(f"\n  💾 [章节实时落盘] [{saved_idx:02d}] 《{cur_title}》已保存至 chapters/{saved_idx:04d}.md ({txt_len} 字)", flush=True)
+                            _emit({"kind": "chapter", "idx": saved_idx, "title": cur_title, "words": txt_len})
                             save_crawl_state(book_dir, {
                                 "book_id": book_id,
                                 "completed": False,
@@ -803,6 +835,7 @@ async def main(book_id_or_url, force=False):
                         got_any = True
 
             total_words_accum += step_words
+            _emit({"kind": "page", "page": step, "chapter": cur_title, "words": total_words_accum, "chapters_done": saved_idx})
 
             # 🌟 逐页完整结构化落盘（真·断点保护）
             if got_any:
@@ -845,6 +878,21 @@ async def main(book_id_or_url, force=False):
             with open(os.path.join(raw_dir, "chap_%04d.json" % saved_idx), "w", encoding="utf-8") as f:
                 json.dump({"title": cur_title, "images": im_list, "text_len": txt_len}, f, ensure_ascii=False)
             print(f"\n  💾 [末章落盘] [{saved_idx:02d}] 《{cur_title}》已写入 chapters/{saved_idx:04d}.md ({txt_len} 字)", flush=True)
+            _emit({"kind": "chapter", "idx": saved_idx, "title": cur_title, "words": txt_len})
+
+        if cancelled:
+            save_crawl_state(book_dir, {
+                "book_id": book_id,
+                "completed": False,
+                "last_step": step,
+                "saved_chapter_count": saved_idx,
+                "last_title": cur_title,
+                "seen_titles": list(seen_titles),
+                "total_words": total_words_accum,
+            })
+            print("⏹ 抓取已取消，断点数据已保存，可随时继续。", flush=True)
+            await ctx.close()
+            return False
 
         save_crawl_state(book_dir, {
             "book_id": book_id,
@@ -862,6 +910,7 @@ async def main(book_id_or_url, force=False):
         await ctx.close()
 
     # 统一补齐配图下载
+    _emit({"kind": "stage", "stage": "images"})
     download_all_images(raw_dir, img_dir)
     return True
 

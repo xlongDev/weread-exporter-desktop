@@ -1,8 +1,10 @@
 //! Tauri 命令面（docs/10 安全设计）：前端唯一可触达的 Rust 接口。
 
+use crate::engine::manager;
+use crate::engine::protocol;
 use crate::log;
 use crate::state::{paths_of, AppPaths, AppState};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -19,12 +21,22 @@ const SETTING_KEYS: &[&str] = &[
     "export.save_cover",
 ];
 
+const FORMATS: &[&str] = &["pdf", "epub", "markdown"];
+
 #[derive(Serialize)]
 pub struct Stats {
     books: i64,
     tasks_total: i64,
     tasks_completed: i64,
     tasks_running: i64,
+}
+
+#[derive(Serialize)]
+pub struct EngineStatusInfo {
+    ready: bool,
+    engine_version: String,
+    python_version: String,
+    error: Option<String>,
 }
 
 fn lock_err<T>(e: std::sync::PoisonError<T>) -> String {
@@ -121,4 +133,112 @@ pub fn reveal_path(state: State<'_, AppState>, path: String) -> Result<(), Strin
         return Err("拒绝访问白名单以外的路径".into());
     }
     tauri_plugin_opener::reveal_item_in_dir(&canonical).map_err(|e| format!("打开失败: {e}"))
+}
+
+/// 引擎握手：确认 worker 可启动并返回版本信息（设置-关于 / 状态展示）。
+#[tauri::command]
+pub fn engine_status(app: tauri::AppHandle) -> Result<EngineStatusInfo, String> {
+    let st = manager::engine_status_logged(&app);
+    Ok(EngineStatusInfo {
+        ready: st.ready,
+        engine_version: st.engine_version,
+        python_version: st.python_version,
+        error: st.error,
+    })
+}
+
+fn default_output_dir() -> String {
+    dirs::document_dir()
+        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default())
+        .join("WeRead-Exports")
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// 书籍 ID 校验（与引擎 extract_book_id 纯 ID 规则一致，docs/10 §5）
+fn valid_book_id(s: &str) -> bool {
+    let n = s.len();
+    (6..=36).contains(&n)
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// 创建真实导出任务并立即启动引擎执行（排队机制在 Phase 5 引入）。
+#[tauri::command]
+pub fn create_task(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    book_id: String,
+    format: String,
+    output_dir: Option<String>,
+) -> Result<i64, String> {
+    if !valid_book_id(&book_id) {
+        return Err("书籍 ID 格式无效".into());
+    }
+    if !FORMATS.contains(&format.as_str()) {
+        return Err(format!("不支持的导出格式: {format}"));
+    }
+    let dir = match output_dir {
+        Some(d) if !d.trim().is_empty() => d,
+        _ => {
+            let conn = state.db.lock().map_err(lock_err)?;
+            read_settings(&conn)?
+                .get("general.output_dir")
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .unwrap_or_else(default_output_dir)
+        }
+    };
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建输出目录失败: {e}"))?;
+
+    let task_id = {
+        let conn = state.db.lock().map_err(lock_err)?;
+        let exists: Option<bool> = conn
+            .query_row("SELECT 1 FROM books WHERE book_id=?1", [&book_id], |_r| Ok(true))
+            .optional()
+            .map_err(|e| format!("查询书籍失败: {e}"))?;
+        if !exists.unwrap_or(false) {
+            return Err("书籍尚未导入，请先在导出向导中完成导入".into());
+        }
+        conn.execute(
+            "INSERT INTO export_tasks(book_id, format, output_dir, status)
+             VALUES (?1, ?2, ?3, 'waiting')",
+            rusqlite::params![book_id, format, dir],
+        )
+        .map_err(|e| format!("创建任务失败: {e}"))?;
+        conn.last_insert_rowid()
+    };
+    log::write("INFO", &format!("task {task_id} created: {book_id} -> {format}"));
+
+    manager::start_task_run(app, task_id, book_id, format, dir, serde_json::json!({}))?;
+    Ok(task_id)
+}
+
+/// 取消任务：运行中 → 向引擎发送优雅取消；等待中 → 直接标记取消。
+#[tauri::command]
+pub fn cancel_task(state: State<'_, AppState>, task_id: i64) -> Result<(), String> {
+    {
+        let running = state.running.lock().map_err(|_| "运行表锁损坏".to_string())?;
+        if let Some(rt) = running.get(&task_id) {
+            rt.cancel_requested
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            return rt.worker.send_line(&protocol::command_line(
+                "cancel",
+                Some(&task_id.to_string()),
+                None,
+            ));
+        }
+    }
+    let conn = state.db.lock().map_err(lock_err)?;
+    let n = conn
+        .execute(
+            "UPDATE export_tasks SET status='cancelled', finished_at=datetime('now'),
+             updated_at=datetime('now') WHERE id=?1 AND status='waiting'",
+            [task_id],
+        )
+        .map_err(|e| format!("取消任务失败: {e}"))?;
+    if n > 0 {
+        Ok(())
+    } else {
+        Err("任务不在可取消状态".into())
+    }
 }

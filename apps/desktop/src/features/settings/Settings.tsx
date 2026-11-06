@@ -4,14 +4,17 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, toAppError } from "../../services/api";
 import { useSettings } from "../../stores/settings";
+import { useEngine } from "../../stores/engine";
 import { applyTheme, type ThemeMode } from "../../stores/theme";
 import type { PathsInfo } from "../../types";
 import { Button } from "../../components/Button";
 import { Select } from "../../components/Select";
+import { StatusPill } from "../../components/StatusPill";
 
 /** 设置：每区块 = 左侧标签列 + 右侧面板（docs/09 §5 / app-screens §8.2） */
 export function Settings() {
   const { settings, loadError, load, set } = useSettings();
+  const engine = useEngine();
   const [paths, setPaths] = useState<PathsInfo | null>(null);
   const [appVersion, setAppVersion] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
@@ -137,6 +140,24 @@ export function Settings() {
       <SettingSection title="关于" description="版本与开源信息。">
         <FieldRow label="应用版本">
           <span className="tnum text-sm text-muted">{appVersion || "—"}</span>
+        </FieldRow>
+        <FieldRow label="导出引擎">
+          <span className="tnum text-sm text-muted">
+            {engine.status === "ready" && `v${engine.engineVersion} · Python ${engine.pythonVersion}`}
+            {engine.status === "checking" && "检查中…"}
+            {engine.status === "unknown" && "—"}
+            {(engine.status === "error" || (engine.status === "ready" && !engine.engineVersion)) &&
+              (engine.error ?? "引擎不可用")}
+          </span>
+          {engine.status === "ready" && <StatusPill tone="positive">就绪</StatusPill>}
+          {engine.status === "error" && (
+            <>
+              <StatusPill tone="negative">异常</StatusPill>
+              <Button variant="ghost" onClick={() => void engine.refresh()}>
+                重试
+              </Button>
+            </>
+          )}
         </FieldRow>
         <FieldRow label="开源许可">
           <span className="text-sm text-muted">

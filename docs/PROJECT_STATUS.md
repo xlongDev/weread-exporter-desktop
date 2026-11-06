@@ -4,17 +4,19 @@
 
 ## 当前阶段
 
-**Phase 2 - 桌面工程骨架** → 完成，进入 Phase 3（Python 引擎封装）
+**Phase 3 - Python 引擎封装** → 完成（待生产构建验证收尾），进入 Phase 4（登录与书籍导入）
 
 ## 已完成
 
 - [x] Phase 0：全量源码审计 + 功能复用分类 + 风险清单 + 迁移方案
-- [x] Phase 1：04-PRD / 05-用户流程 / 06-系统架构 / 07-数据库设计 / 08-引擎协议 v1 / 09-UI 设计系统（taste-skill 正式发牌 achromatic-ledger）/ 10-安全设计 / 11-测试策略
-- [x] Phase 2：Tauri 2 + React 19 + TS strict 工程（apps/desktop）；设计 Token（浅/深双主题）与基础组件（Button/StatusPill/KpiStrip/EmptyState/SectionHeader/Select）；Open Plane 应用壳 + 4 页面真实空态；SQLite（rusqlite bundled）+ user_version 迁移 + 备份；settings 读写（白名单键）；极简文件日志（含 wr_skey/wr_vid 脱敏）；reveal_path 路径白名单；原生窗口 1280×800；CSP 与最小 capability
+- [x] Phase 1：04~11 全套设计文档（含 taste-skill 发牌设计系统）
+- [x] Phase 2：Tauri 2 + React 19 + TS strict 工程；设计 Token（浅/深）；基础组件；SQLite 迁移；设置持久化；日志脱敏；最小 capability/CSP
+- [x] Phase 3：引擎三文件平移至 engine/（CLI 保持可用，BASE 自适应仓库根）；crawl/export 增加可选 progress / should_cancel / output_dir 参数（默认行为不变）；protocol.py（v1）；adapter/worker.py（stdin 指令 / stdout 协议行 / stderr 日志 + Mock 模式）；Rust engine 模块（worker.rs 子进程管理 + protocol.rs 解析 + manager.rs 任务状态机 + 全链路集成测试）；create_task / cancel_task / engine_status 命令；引擎握手预热 + 前端事件订阅；pytest 回归 25/25（含真实数据导出回归）
 
 ## 进行中
 
-- [ ] Phase 3：引擎平移 engine/ + protocol.py + adapter/worker.py + Rust engine_manager + pytest 回归基线
+- [ ] Phase 3 收尾：`tauri build` 生产构建验证（进行中）
+- [ ] Phase 4：登录与书籍导入（auth_check 弹窗扫码 / book_info 元数据 / books 表落库 / 导出向导第一步）
 
 ## 未完成任务（按阶段）
 
@@ -33,5 +35,7 @@
 
 ## 测试状态
 
-- 引擎：导入冒烟 ✅（正式回归测试套件在 Phase 3 建立）
-- 桌面端：cargo test 3/3 ✅（迁移 ×2 + 日志脱敏 ×1）· cargo clippy -D warnings ✅ · tsc strict + vite build ✅ · 调试二进制启动 8s 无崩溃 ✅ · 浅/深主题浏览器截图验证 ✅
+- 引擎：pytest 25/25 ✅（纯函数 / 协议解析 / Worker 子进程 Mock 集成 / 真实数据导出回归）
+- 桌面端：cargo test 11/11 ✅（迁移 ×2 + 脱敏 + 协议解析 ×3 + python 解析 + 任务状态机 ×2 + 全链路 Mock 集成）· clippy -D warnings ✅ · tsc strict + vite build ✅
+- 真机验证：**正式 .app 产物（tauri build）页面加载 ✅、前端 invoke ✅**；开发模式（tauri dev）引擎握手 ✅、Rust 派生真实 python worker ✅（日志 `engine handshake ok: v0.1.0 (python 3.15.2)`）
+- 已知观察：①裸 `cargo build`（非 tauri CLI 路径）的嵌入式资产页面不加载 —— 官方路径无影响，以 tauri build 产物为准；②生产 .app 引擎握手失败为预期（engine/Python 运行时资源打包在 Phase 8 实施），UI 如实显示"引擎异常"
