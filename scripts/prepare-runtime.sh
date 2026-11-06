@@ -29,7 +29,12 @@ case "$ARCH" in
 esac
 
 REQ="$ROOT/requirements.txt"
-RUNTIME_HASH=$(cat "$REQ" "$0" | shasum -a 256 | cut -d' ' -f1)
+# shasum 仅 macOS 自带；Linux/Windows(Git Bash) 用 sha256sum；哈希包含目标架构
+if command -v shasum >/dev/null 2>&1; then
+  RUNTIME_HASH=$( (cat "$REQ" "$0"; echo "PY_ARCH=$PY_ARCH") | shasum -a 256 | cut -d' ' -f1)
+else
+  RUNTIME_HASH=$( (cat "$REQ" "$0"; echo "PY_ARCH=$PY_ARCH") | sha256sum | cut -d' ' -f1)
+fi
 
 mkdir -p "$CACHE"
 
