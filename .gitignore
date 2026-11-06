@@ -26,3 +26,6 @@ apps/desktop/src-tauri/gen/
 
 # Phase 8 打包资源（脚本组装，不入库）
 apps/desktop/src-tauri/resources/
+
+# 本地汇总的发布产物
+dist/
