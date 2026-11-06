@@ -187,7 +187,7 @@ export function Export() {
                 {phase === "parsing" ? "获取中…" : "获取书籍"}
               </Button>
             </div>
-            {error && <p className="text-sm text-negative">{error}</p>}
+            {error && <p className="text-sm text-negative-text">{error}</p>}
           </section>
 
           {meta && (
@@ -202,10 +202,10 @@ export function Export() {
                 {meta.author && <p className="text-sm text-muted">{meta.author}</p>}
                 {meta.intro && <p className="selectable line-clamp-3 text-sm text-muted">{meta.intro}</p>}
                 {validation && !validation.ok && validation.user_message && (
-                  <p className="text-sm text-negative">{validation.user_message}</p>
+                  <p className="text-sm text-negative-text">{validation.user_message}</p>
                 )}
                 {validation && !validation.logged_in && validation.ok && (
-                  <p className="text-sm text-warning">尚未登录：登录后才能确认访问权限并抓取正文。</p>
+                  <p className="text-sm text-warning-text">尚未登录：登录后才能确认访问权限并抓取正文。</p>
                 )}
                 <div className="mt-2 flex items-center gap-2">
                   {validation?.ok && !imported && (
@@ -301,7 +301,7 @@ export function Export() {
               <Button onClick={() => void auth.startLogin()}>登录</Button>
             </div>
           )}
-          {createError && <p className="text-sm text-negative">{createError}</p>}
+          {createError && <p className="text-sm text-negative-text">{createError}</p>}
 
           <div>
             <Button variant="primary" disabled={creating} onClick={() => void createTasks()}>

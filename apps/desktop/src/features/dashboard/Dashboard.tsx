@@ -33,7 +33,7 @@ export function Dashboard() {
       <h1 className="text-2xl font-bold text-ink">总览</h1>
 
       {error && (
-        <p className="text-sm text-negative">
+        <p className="text-sm text-negative-text">
           统计信息读取失败：{error}
           <button className="ml-2 underline" onClick={() => void load()}>
             重试
@@ -53,6 +53,7 @@ export function Dashboard() {
         />
       )}
 
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-12">
       <section className="flex flex-col gap-3">
         <SectionHeader
           title="正在进行的任务"
@@ -67,7 +68,7 @@ export function Dashboard() {
         {stats && stats.tasks_running > 0 ? (
           <p className="tnum text-sm text-muted">{stats.tasks_running} 个任务进行中</p>
         ) : (
-          <p className="text-sm text-faint">没有正在进行的任务。</p>
+          <p className="text-sm text-muted">没有正在进行的任务。</p>
         )}
       </section>
 
@@ -79,6 +80,7 @@ export function Dashboard() {
           description="完成第一次导出后，最近的书籍会显示在这里。"
         />
       </section>
+      </div>
     </div>
   );
 }
@@ -106,14 +108,14 @@ function AccountCard() {
         : "登录后即可抓取并导出你有权阅读的书籍。";
 
   return (
-    <section className="flex items-center justify-between rounded-card border border-line bg-surface px-6 py-5">
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-6 py-5">
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2.5">
           <h2 className="text-base font-semibold">微信读书账号</h2>
           {statusPill}
         </div>
         <p className="text-sm text-muted">{hint}</p>
-        {auth.lastError && <p className="text-sm text-negative">{auth.lastError}</p>}
+        {auth.lastError && <p className="text-sm text-negative-text">{auth.lastError}</p>}
       </div>
       <div className="flex items-center gap-2">
         {auth.status === "in" ? (

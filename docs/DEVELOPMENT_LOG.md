@@ -1,5 +1,12 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · Phase 7 UI/UX 精细化
+
+- **模块**：styles/index.css（动效 keyframes）、AppShell/Dialog/Drawer（动效类）、tokens.css（暗色 faint 提亮 + negative/warning 正文文本色）、Dashboard（两栏下部）、Tasks/Library（图标与样式修正）
+- **内容**：页面切换 160ms 淡入上移；遮罩 140ms + 对话框 160ms 缩放 + 抽屉 180ms 滑入；prefers-reduced-motion 全局降级；taste-skill lint --app 0 FAIL、inspect --app 0 FAIL（3 个保留 WARN 有据：Dialog/Drawer 阴影属规范允许浮层、em-dash 均为缺失值占位符 —）。
+- **测试**：全套门禁绿（pytest 26 / cargo 13 / tsc+vite / lint+inspect）。
+- **已知限制（记录）**：窗口最小宽度 1080px 保证布局完整，侧栏折叠为图标栏暂不实现（画布流式布局已覆盖最小窗口）。
+
 ## 2026-11-07 · Phase 6 书库与断点续导
 
 - **模块**：Rust commands（list_files/open_file/reveal_exported_file/delete_exported_file/get_task_detail/reveal_task_log/force_close、create_task 增加 resumed_from）、前端（Dialog/Drawer 组件、Library 封面墙、任务详情抽屉、CloseGuard）
