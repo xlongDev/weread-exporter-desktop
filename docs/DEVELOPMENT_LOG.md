@@ -1,5 +1,13 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · Phase 2 桌面应用基础工程
+
+- **模块**：apps/desktop/（新建），scripts/dev.sh，.gitignore
+- **内容**：create-tauri-app 脚手架（react-ts）→ 按架构文档重组；Rust：db.rs（WAL/外键/busy_timeout + user_version 迁移 + 备份轮换 + quick_check）、commands.rs（get_stats/get_settings/set_setting 白名单/get_paths/reveal_path 路径白名单）、log.rs（5MB 轮转 + 凭证脱敏）、state.rs；tauri.conf（窗口 1280×800/min 1080×720、CSP、identifier com.weread.exporter.desktop）；capability 最小化（core/opener/dialog）。前端：tokens.css（发牌方向 achromatic-ledger + 纸感地面 #f4f3f1 + 深色映射）、Tailwind v4 @theme inline 映射、主题系统（system/light/dark + 首帧应用 + 系统跟随）、Open Plane 壳、4 组件 + 4 页面（总览真实统计/任务/书库真实空态/设置全功能）。
+- **原因**：Phase 2 交付要求；UI 先设计系统后页面（用户约束）。
+- **测试**：cargo test 3/3；clippy -D warnings 通过；npm build（tsc strict）通过；调试二进制启动 8s 无崩溃且日志落盘；浏览器截图验证浅/深主题渲染。
+- **备注**：npm install 在外置 SSD 上耗时 28 分钟（环境因素）；开发中修复了 3 处 Rust 类型/死代码问题（管道吞退出码导致漏检，已改用 pipefail 复核）。
+
 ## 2026-11-06 · Phase 1 产品与架构设计
 
 - **模块**：docs/

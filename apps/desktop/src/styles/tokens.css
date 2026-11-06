@@ -1,0 +1,59 @@
+/* 设计 Token（docs/09-ui-design-system.md · achromatic-ledger 发牌方向） */
+:root {
+  --ground: #f4f3f1;
+  --surface: #ffffff;
+  --well: #fafaf9;
+  --raised: #e9e8e5;
+  --border: #e3e1dd;
+  --rule: #eceae6;
+  --control: #d4d2cd;
+  --text: #191817;
+  --muted: #6f6c67;
+  --faint: #9b978f;
+  --accent: #141414;
+  --accent-ink: #ffffff;
+  --data: #1d5fbf;
+  --positive: #2e7d32;
+  --negative: #c4242a;
+  --warning: #92400e;
+  --pill-positive-bg: #dcfae5;
+  --pill-positive-ink: #04250e;
+  --pill-negative-bg: #ffedea;
+  --pill-negative-ink: #831c1e;
+  --pill-warning-bg: #fffbeb;
+  --pill-warning-ink: #92400e;
+  --pill-neutral-bg: #e9e8e5;
+  --pill-neutral-ink: #3d3b38;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --radius-media: 3px;
+  --row-height: 44px;
+  --sidebar-w: 232px;
+  --gap: 12px;
+  --pad: 24px;
+  --control-h: 36px;
+}
+
+[data-theme="dark"] {
+  --ground: #131312;
+  --surface: #1c1c1b;
+  --well: #202020;
+  --raised: #262625;
+  --border: #2b2b29;
+  --rule: #242423;
+  --control: #3a3a38;
+  --text: #f0efed;
+  --muted: #a3a09a;
+  --faint: #7a776f;
+  --accent: #f0efed;
+  --accent-ink: #141414;
+  --data: #5b8fd9;
+  --pill-positive-bg: #17301f;
+  --pill-positive-ink: #9fdcb4;
+  --pill-negative-bg: #38191b;
+  --pill-negative-ink: #f2b8ba;
+  --pill-warning-bg: #33260d;
+  --pill-warning-ink: #e5c26a;
+  --pill-neutral-bg: #262625;
+  --pill-neutral-ink: #c9c6c0;
+}
