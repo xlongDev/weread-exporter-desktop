@@ -77,7 +77,12 @@ pub fn run() {
                     .running
                     .lock()
                     .map(|m| !m.is_empty())
-                    .unwrap_or(false);
+                    .unwrap_or(false)
+                    || state
+                        .ops
+                        .lock()
+                        .map(|m| !m.is_empty())
+                        .unwrap_or(false);
                 if busy {
                     api.prevent_close();
                     use tauri::Emitter;

@@ -1,5 +1,11 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · 收尾质量自查（生命周期与关闭路径）
+
+- **修复**：①关闭守卫原来只检查运行中任务 —— 登录窗口（ops）打开时关闭应用会遗留孤儿 worker/浏览器，现 ops 占用同样触发确认对话框；②引擎进程启动失败时任务永久停留 waiting —— 现在 enqueue_or_start / start_next_queued 失败路径调用 mark_task_spawn_failed 显式落库 failed（ENGINE_SPAWN_FAILED），且不改写已终态任务。
+- **测试**：新增 spawn_failure_marks_task_failed 确定性回归（不再依赖进程环境变量 + 真实 spawn，规避并行竞态）；ENV_LOCK 毒化容忍；套件连跑三次 14/14 稳定。
+- **验证**：pytest 26/26 · cargo 14/14 · clippy 0 · tsc/vite 通过；两个 DMG hdiutil 挂载验证通过；真实 PDF/EPUB 导出实测通过（三格式全实测）。
+
 ## 2026-11-07 · Phase 8+9 打包与终验
 
 - **模块**：scripts/prepare-runtime.sh（新增）、scripts/make-icon.py（新增）、tauri.conf.json（资源映射 + 前置命令）、worker.rs（打包运行时解析）、docs/12~15、README、CHANGELOG
