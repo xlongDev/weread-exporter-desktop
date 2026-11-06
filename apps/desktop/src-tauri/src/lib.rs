@@ -32,6 +32,7 @@ pub fn run() {
             db: std::sync::Mutex::new(conn),
             paths: paths.clone(),
             running: std::sync::Mutex::new(std::collections::HashMap::new()),
+            ops: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_stats,
@@ -41,7 +42,11 @@ pub fn run() {
             commands::reveal_path,
             commands::engine_status,
             commands::create_task,
-            commands::cancel_task
+            commands::cancel_task,
+            commands::start_op,
+            commands::cancel_op,
+            commands::logout,
+            commands::import_book
         ]);
 
     handle_builder

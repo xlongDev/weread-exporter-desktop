@@ -73,10 +73,13 @@ class Worker:
                 self.current_task_id = None
             return
         if action == "auth_check":
-            await self.auth_check()
+            await self.auth_check(task_id)
+            return
+        if action == "login":
+            await self.login(task_id)
             return
         if action == "book_info":
-            self.emit("book.validation", {"ok": False, "reason": "书籍信息获取将在登录模块接入后可用"}, task_id)
+            await self.book_info(task_id, cmd.get("params") or {})
             return
 
         self.emit("engine.error", {"code": "UNKNOWN_CMD", "message": f"未知指令: {action}"}, task_id)
@@ -182,7 +185,7 @@ class Worker:
         self.emit("task.completed", {"outputs": [{"format": fmt, "file_path": fake_path}]}, task_id)
 
     # ---- 会话检查 ----
-    async def auth_check(self):
+    async def auth_check(self, task_id=None):
         logged_in = False
         error = None
         try:
@@ -201,7 +204,120 @@ class Worker:
         data = {"logged_in": logged_in}
         if error:
             data["error"] = error
-        self.emit("auth.status", data)
+        self.emit("auth.status", data, task_id)
+
+    # ---- 扫码登录（可见浏览器窗口）----
+    async def login(self, task_id):
+        import crawl_weread
+        from playwright.async_api import async_playwright
+
+        if MOCK:
+            await asyncio.sleep(0.2)
+            self.emit("auth.required", {"wait_seconds": 1}, task_id)
+            await asyncio.sleep(0.3)
+            self.emit("auth.status", {"logged_in": True, "mock": True}, task_id)
+            return
+
+        try:
+            async with async_playwright() as p:
+                ctx = await crawl_weread.launch_browser_context(p, crawl_weread.USER_DATA_DIR, headless=False)
+                try:
+                    if await crawl_weread.check_cookies_login(ctx):
+                        self.emit("auth.status", {"logged_in": True}, task_id)
+                        return
+                    self.emit("auth.required", {"wait_seconds": 300}, task_id)
+                    self.log("等待微信扫码登录（最长 300 秒）...")
+                    for _ in range(150):
+                        await asyncio.sleep(2)
+                        if self.cancel_event.is_set():
+                            self.emit("auth.status", {"logged_in": False, "cancelled": True}, task_id)
+                            return
+                        if await crawl_weread.check_cookies_login(ctx):
+                            self.emit("auth.status", {"logged_in": True}, task_id)
+                            return
+                    self.emit("auth.status", {"logged_in": False, "reason": "timeout"}, task_id)
+                finally:
+                    await ctx.close()
+        except Exception as e:
+            self.log("login exception: " + repr(e))
+            self.emit("auth.status", {"logged_in": False, "error": str(e)}, task_id)
+
+    # ---- 书籍元数据（含封面下载与可访问性校验）----
+    async def book_info(self, task_id, params):
+        import urllib.request
+
+        import crawl_weread
+        from playwright.async_api import async_playwright
+
+        book_id = crawl_weread.extract_book_id(params.get("book_id", ""))
+        cover_dir = params.get("cover_dir") or os.path.join(ENGINE_DIR, "..", "output")
+        if not book_id:
+            self.emit("book.validation", {"ok": False, "reason": "invalid_id", "user_message": "书籍链接或 ID 无效"}, task_id)
+            return
+        if MOCK:
+            self.emit("book.metadata", {"book_id": book_id, "title": "Mock 书籍", "author": "Mock 作者",
+                                        "intro": "这是 Mock 模式的书籍简介。", "cover_path": ""}, task_id)
+            self.emit("book.validation", {"ok": True}, task_id)
+            return
+
+        try:
+            async with async_playwright() as p:
+                ctx = await crawl_weread.launch_browser_context(p, crawl_weread.USER_DATA_DIR, headless=True)
+                try:
+                    logged_in = await crawl_weread.check_cookies_login(ctx)
+                    page = await ctx.new_page()
+                    target_url = f"https://weread.qq.com/web/reader/{book_id}"
+                    self.log(f"获取书籍信息: {target_url}")
+                    await page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
+                    await asyncio.sleep(3)
+                    meta = await page.evaluate("""() => {
+                        let info = (window.__INITIAL_STATE__ && window.__INITIAL_STATE__.reader && window.__INITIAL_STATE__.reader.bookInfo) || {};
+                        return {
+                            title: info.title || document.title.replace(' - 微信读书', '').trim(),
+                            author: info.author || '',
+                            cover: info.cover || '',
+                            intro: info.intro || '',
+                            publisher: info.publisher || ''
+                        };
+                    }""")
+                    cover_path = ""
+                    cover_url = meta.get("cover")
+                    if cover_url:
+                        try:
+                            os.makedirs(cover_dir, exist_ok=True)
+                            cover_path = os.path.join(cover_dir, f"{book_id}.jpg")
+                            req = urllib.request.Request(cover_url, headers={"Referer": "https://weread.qq.com/", "User-Agent": "Mozilla/5.0"})
+                            raw = urllib.request.urlopen(req, timeout=15).read()
+                            if len(raw) > 500:
+                                with open(cover_path, "wb") as f:
+                                    f.write(raw)
+                            else:
+                                cover_path = ""
+                        except Exception as e:
+                            self.log(f"封面下载失败: {e}")
+                            cover_path = ""
+
+                    title = (meta.get("title") or "").strip()
+                    ok = bool(title) and "微信读书" not in title[:6]
+                    self.emit("book.metadata", {
+                        "book_id": book_id,
+                        "title": title,
+                        "author": meta.get("author", ""),
+                        "intro": meta.get("intro", ""),
+                        "cover_path": cover_path,
+                        "logged_in": logged_in,
+                    }, task_id)
+                    self.emit("book.validation", {
+                        "ok": ok,
+                        "reason": "" if ok else "not_found",
+                        "user_message": "" if ok else "未找到该书籍，请确认链接是否正确、书籍是否存在",
+                        "logged_in": logged_in,
+                    }, task_id)
+                finally:
+                    await ctx.close()
+        except Exception as e:
+            self.log("book_info exception: " + repr(e))
+            self.emit("book.validation", {"ok": False, "reason": "error", "user_message": f"获取书籍信息失败：{e}"}, task_id)
 
 
 async def amain():

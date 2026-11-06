@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { House, ListChecks, LibraryBig, Settings2 } from "lucide-react";
+import { House, BookOpen, ListChecks, LibraryBig, Settings2 } from "lucide-react";
 import { useNav, type Page } from "../stores/nav";
 
 const NAV: { key: Page; label: string; icon: typeof House }[] = [
   { key: "dashboard", label: "总览", icon: House },
+  { key: "export", label: "导出书籍", icon: BookOpen },
   { key: "tasks", label: "任务中心", icon: ListChecks },
   { key: "library", label: "书库", icon: LibraryBig },
   { key: "settings", label: "设置", icon: Settings2 },

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, toAppError } from "../../services/api";
 import { useNav } from "../../stores/nav";
+import { useAuth } from "../../stores/auth";
 import type { Stats } from "../../types";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
@@ -40,17 +41,7 @@ export function Dashboard() {
         </p>
       )}
 
-      <section className="flex items-center justify-between rounded-card border border-line bg-surface px-6 py-5">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-base font-semibold">微信读书账号</h2>
-            <StatusPill tone="neutral">未登录</StatusPill>
-          </div>
-          <p className="text-sm text-muted">
-            登录后即可抓取并导出你有权阅读的书籍。
-          </p>
-        </div>
-      </section>
+      <AccountCard />
 
       {stats && (
         <KpiStrip
@@ -89,5 +80,59 @@ export function Dashboard() {
         />
       </section>
     </div>
+  );
+}
+
+/** 登录卡：真实会话状态 + 扫码登录流程（docs/05 F1/F2） */
+function AccountCard() {
+  const auth = useAuth();
+  const goto = useNav((s) => s.goto);
+
+  const statusPill =
+    auth.status === "in" ? (
+      <StatusPill tone="positive">已登录</StatusPill>
+    ) : auth.status === "checking" ? (
+      <StatusPill tone="neutral">检查中…</StatusPill>
+    ) : (
+      <StatusPill tone="neutral">未登录</StatusPill>
+    );
+
+  const hint = auth.waiting
+    ? "已在弹出浏览器中打开微信读书，请使用微信扫码（300 秒内完成）。"
+    : auth.status === "in"
+      ? "会话有效，可以开始导入并导出书籍。"
+      : auth.status === "checking"
+        ? "正在检查本机登录会话…"
+        : "登录后即可抓取并导出你有权阅读的书籍。";
+
+  return (
+    <section className="flex items-center justify-between rounded-card border border-line bg-surface px-6 py-5">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-base font-semibold">微信读书账号</h2>
+          {statusPill}
+        </div>
+        <p className="text-sm text-muted">{hint}</p>
+        {auth.lastError && <p className="text-sm text-negative">{auth.lastError}</p>}
+      </div>
+      <div className="flex items-center gap-2">
+        {auth.status === "in" ? (
+          <Button onClick={() => goto("export")}>导出书籍</Button>
+        ) : auth.waiting ? (
+          <Button onClick={() => void auth.cancelLogin()}>取消</Button>
+        ) : (
+          <>
+            {auth.status !== "checking" && (
+              <Button variant="ghost" onClick={() => void auth.check()}>
+                重新检查
+              </Button>
+            )}
+            <Button variant="primary" onClick={() => void auth.startLogin()}>
+              登录微信读书
+            </Button>
+          </>
+        )}
+      </div>
+    </section>
   );
 }

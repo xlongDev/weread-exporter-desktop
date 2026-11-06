@@ -124,6 +124,39 @@ def test_worker_rejects_bad_format():
             proc.kill()
 
 
+def test_worker_mock_login_auth_check_and_book_info():
+    proc = spawn_worker(mock=True)
+    reader = EventReader(proc)
+    try:
+        assert reader.next()["event"] == "engine.ready"
+
+        # auth_check：事件必须携带 task_id（Rust 侧 op 终态匹配依赖它）
+        send(proc, {"protocol_version": 1, "cmd": "auth_check", "task_id": "op-auth"})
+        ev = reader.next()
+        assert ev["event"] == "auth.status" and ev["task_id"] == "op-auth"
+
+        # login：auth.required → auth.status
+        send(proc, {"protocol_version": 1, "cmd": "login", "task_id": "op-login"})
+        ev = reader.next()
+        assert ev["event"] == "auth.required" and ev["task_id"] == "op-login"
+        ev = reader.next()
+        assert ev["event"] == "auth.status" and ev["data"]["logged_in"] is True
+
+        # book_info：book.metadata → book.validation
+        send(proc, {"protocol_version": 1, "cmd": "book_info", "task_id": "op-book",
+                    "params": {"book_id": "mockbook123"}})
+        ev = reader.next()
+        assert ev["event"] == "book.metadata" and ev["task_id"] == "op-book" and ev["data"]["title"]
+        ev = reader.next()
+        assert ev["event"] == "book.validation" and ev["data"]["ok"] is True
+
+        send(proc, {"protocol_version": 1, "cmd": "shutdown"})
+        proc.wait(timeout=10)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
 def test_worker_real_markdown_export_from_existing_data():
     """真实导出回归：使用仓库内已有真实抓取数据（output/）执行 Markdown 导出。
 
