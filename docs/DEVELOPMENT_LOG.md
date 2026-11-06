@@ -1,5 +1,12 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · 真实抓取验收与取消响应性改进
+
+- **模块**：engine/crawl_weread.py（sleep_cancellable）、engine/tests/test_crawl_cancel.py（新增）
+- **内容**：翻页延迟（8~20s）与温和长停顿（60~120s）切片化为 5s 粒度并在每片检查 should_cancel —— 取消指令从"最长等 2 分钟"降到"≤5 秒生效"；CLI（不传回调）行为不变。真实服务器验证：以用户有效会话抓取 18~23 页真实内容（隔离临时输出），第 1 章完整落盘，取消后断点态正确（completed=false）。
+- **测试**：pytest 29/29（+取消响应性 3 项）；发布流程新增三项 CI 修复（占位文件恢复/Windows sha256sum/运行时父目录）。
+- **遗留**：断点续传"续跑"现场重演因测试自身反复强杀浏览器导致的 profile 锁未收敛，留待 GUI 首用验证（逻辑即用户 CLI 实证过的实现）。
+
 ## 2026-11-07 · 收尾质量自查（生命周期与关闭路径）
 
 - **修复**：①关闭守卫原来只检查运行中任务 —— 登录窗口（ops）打开时关闭应用会遗留孤儿 worker/浏览器，现 ops 占用同样触发确认对话框；②引擎进程启动失败时任务永久停留 waiting —— 现在 enqueue_or_start / start_next_queued 失败路径调用 mark_task_spawn_failed 显式落库 failed（ENGINE_SPAWN_FAILED），且不改写已终态任务。
