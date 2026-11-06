@@ -5,7 +5,7 @@ const invokeMock = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
-const listenMock = vi.hoisted(() => vi.fn(async () => () => {}));
+const listenMock = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => () => {}));
 let lastListener: ((ev: { payload: unknown }) => void) | null = null;
 listenMock.mockImplementation(async (...args: unknown[]) => {
   lastListener = args[1] as unknown as (ev: { payload: unknown }) => void;
