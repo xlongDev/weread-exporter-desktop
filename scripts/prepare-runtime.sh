@@ -10,10 +10,15 @@ RES="$ROOT/apps/desktop/src-tauri/resources"
 CACHE="${HOME}/.cache/weread-packaging"
 PYTHON_BS_TAG="20261026"
 PY_VER="3.12.16"
+# TAURI_TARGET 覆盖构建目标架构（如 x86_64-apple-darwin 交叉构建 Intel 版），默认本机架构
 ARCH="$(uname -m)"
+if [ -n "${TAURI_TARGET:-}" ]; then
+  ARCH="${TAURI_TARGET%%-*}"   # x86_64-apple-darwin -> x86_64
+  [ "$ARCH" = "x86_64" ] && ARCH="x86_64"
+fi
 
 case "$ARCH" in
-  arm64) PY_ARCH="aarch64-apple-darwin" ;;
+  arm64|aarch64) PY_ARCH="aarch64-apple-darwin" ;;
   x86_64) PY_ARCH="x86_64-apple-darwin" ;;
   *) echo "不支持的架构: $ARCH"; exit 1 ;;
 esac
