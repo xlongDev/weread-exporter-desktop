@@ -11,3 +11,15 @@ Thumbs.db
 *.epub
 *.pdf
 _temp_*.html
+
+# 桌面应用
+node_modules/
+dist/
+.taste-skill/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+*.dmg
+*.app
+
+# macOS AppleDouble
+._*
