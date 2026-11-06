@@ -12,6 +12,7 @@
 - ci.yml：push/PR 自动回归（pytest + clippy + cargo test + tsc）—— 首跑即绿
 - release.yml：tag v* 或手动触发 —— Windows NSIS（49MB）与 macOS arm64 DMG（85MB）已由 CI 产出
 - dist/（本地）：aarch64.dmg 85MB · x64.dmg 82MB（本地交叉构建）· x64-setup.exe 49MB（CI 产出）
+- GitHub Release：https://github.com/xlongDev/weread-exporter-desktop/releases/tag/v0.1.0 （三平台产物 + SHA256SUMS 已公开可下载；后续 tag 构建自动挂载 Release）
 
 ## 交付物
 

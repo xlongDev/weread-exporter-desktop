@@ -49,6 +49,7 @@
 - [x] 关闭保护（运行中任务拦截 + force_close 清理）
 
 ## 交付
+- [x] GitHub Release 页已发布（v0.1.0：双 DMG + Windows exe + SHA256SUMS 可公开下载）
 - [x] macOS 安装包构建成功（.app 260MB / DMG 85MB）
 - [x] Windows 安装包构建成功（GitHub Actions windows runner 产出 NSIS setup.exe 49MB，已下载归档 dist/）
 - [x] 独立安装后能够运行（~/Applications 拷贝实测，捆绑 Python 3.12.16 握手通过）
