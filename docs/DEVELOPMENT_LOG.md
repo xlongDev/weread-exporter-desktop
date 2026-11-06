@@ -1,5 +1,12 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · Phase 6 书库与断点续导
+
+- **模块**：Rust commands（list_files/open_file/reveal_exported_file/delete_exported_file/get_task_detail/reveal_task_log/force_close、create_task 增加 resumed_from）、前端（Dialog/Drawer 组件、Library 封面墙、任务详情抽屉、CloseGuard）
+- **内容**：书库双视图 + 搜索筛选 + 三类删除确认（仅记录/记录+文件，均明确指名文件）；任务详情含章节级断点账本（task_chapters）与日志定位；failed/cancelled 任务可重试/继续（新任务 resumed_from 关联原任务，引擎凭 raw 落盘自动从断点续跑）；任务运行时关闭窗口被拦截并引导确认，确认后 kill 全部引擎进程再退出。
+- **测试**：cargo 13/13、pytest 26/26、构建全绿。
+- **修复**：commands.rs 因锚点重复导致的函数重复定义（reveal_exported_file / force_close 各一次）。
+
 ## 2026-11-07 · Phase 4+5 登录导入与完整导出
 
 - **模块**：engine/adapter/worker.py（login/book_info ops）、Rust manager/commands/state（ops 管理、任务队列、list_tasks、reveal_task_dir、import_book、logout、asset 协议）、前端（auth store、登录卡、导出向导 4 步、任务中心实时列表、任务 store）

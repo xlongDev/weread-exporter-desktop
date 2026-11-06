@@ -171,6 +171,7 @@ pub fn create_task(
     book_id: String,
     format: String,
     output_dir: Option<String>,
+    resumed_from: Option<i64>,
 ) -> Result<i64, String> {
     if !valid_book_id(&book_id) {
         return Err("书籍 ID 格式无效".into());
@@ -200,9 +201,9 @@ pub fn create_task(
             return Err("书籍尚未导入，请先在导出向导中完成导入".into());
         }
         conn.execute(
-            "INSERT INTO export_tasks(book_id, format, output_dir, status)
-             VALUES (?1, ?2, ?3, 'waiting')",
-            rusqlite::params![book_id, format, dir],
+            "INSERT INTO export_tasks(book_id, format, output_dir, status, resumed_from)
+             VALUES (?1, ?2, ?3, 'waiting', ?4)",
+            rusqlite::params![book_id, format, dir, resumed_from],
         )
         .map_err(|e| format!("创建任务失败: {e}"))?;
         conn.last_insert_rowid()
@@ -375,6 +376,223 @@ pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("重建 profile 目录失败: {e}"))?;
     log::write("INFO", "browser profile cleared (logout)");
     Ok(())
+}
+
+#[derive(Serialize)]
+pub struct LibraryFile {
+    id: i64,
+    book_id: String,
+    title: String,
+    author: String,
+    cover_path: String,
+    format: String,
+    file_path: String,
+    file_name: String,
+    file_size: i64,
+    exists_ok: bool,
+    created_at: String,
+}
+
+/// 书库列表：导出产物 join 书籍；顺带回写文件存在性。
+#[tauri::command]
+pub fn list_files(state: State<'_, AppState>) -> Result<Vec<LibraryFile>, String> {
+    let conn = state.db.lock().map_err(lock_err)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.id, f.book_id, COALESCE(b.title,''), COALESCE(b.author,''),
+                    COALESCE(b.cover_path,''), f.format, f.file_path, f.file_name,
+                    f.file_size, f.created_at
+             FROM exported_files f LEFT JOIN books b ON b.book_id = f.book_id
+             ORDER BY f.created_at DESC, f.id DESC",
+        )
+        .map_err(|e| format!("查询书库失败: {e}"))?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(LibraryFile {
+                id: r.get(0)?,
+                book_id: r.get(1)?,
+                title: r.get(2)?,
+                author: r.get(3)?,
+                cover_path: r.get(4)?,
+                format: r.get(5)?,
+                file_path: r.get(6)?,
+                file_name: r.get(7)?,
+                file_size: r.get(8)?,
+                created_at: r.get(9)?,
+                exists_ok: false,
+            })
+        })
+        .map_err(|e| format!("查询书库失败: {e}"))?;
+    let mut out = Vec::new();
+    for row in rows {
+        let mut f = row.map_err(|e| format!("读取书库行失败: {e}"))?;
+        f.exists_ok = std::path::Path::new(&f.file_path).is_file();
+        let _ = conn.execute(
+            "UPDATE exported_files SET exists_ok=?2 WHERE id=?1",
+            rusqlite::params![f.id, f.exists_ok as i64],
+        );
+        out.push(f);
+    }
+    Ok(out)
+}
+
+/// 用系统默认程序打开导出文件（路径取自数据库记录）。
+#[tauri::command]
+pub fn open_file(state: State<'_, AppState>, id: i64) -> Result<(), String> {
+    let path: String = {
+        let conn = state.db.lock().map_err(lock_err)?;
+        conn.query_row("SELECT file_path FROM exported_files WHERE id=?1", [id], |r| r.get(0))
+            .optional()
+            .map_err(|e| format!("查询文件失败: {e}"))?
+            .ok_or("记录不存在")?
+    };
+    let p = std::path::PathBuf::from(&path);
+    if !p.is_file() {
+        return Err("文件不存在（可能已被移动或删除）".into());
+    }
+    tauri_plugin_opener::open_path(p, None::<&str>).map_err(|e| format!("打开失败: {e}"))
+}
+
+/// 删除书库记录；delete_file=true 时同时删除磁盘文件。
+#[tauri::command]
+pub fn delete_exported_file(
+    state: State<'_, AppState>,
+    id: i64,
+    delete_file: bool,
+) -> Result<(), String> {
+    let (path, exists): (String, bool) = {
+        let conn = state.db.lock().map_err(lock_err)?;
+        conn.query_row(
+            "SELECT file_path, exists_ok FROM exported_files WHERE id=?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get::<_, i64>(1)? != 0)),
+        )
+        .optional()
+        .map_err(|e| format!("查询文件失败: {e}"))?
+        .ok_or("记录不存在")?
+    };
+    if delete_file && exists {
+        std::fs::remove_file(&path).map_err(|e| format!("删除文件失败: {e}"))?;
+        log::write("INFO", &format!("file deleted: {path}"));
+    }
+    let conn = state.db.lock().map_err(lock_err)?;
+    conn.execute("DELETE FROM exported_files WHERE id=?1", [id])
+        .map_err(|e| format!("删除记录失败: {e}"))?;
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct ChapterRow {
+    chapter_idx: i64,
+    title: String,
+    status: String,
+}
+
+#[derive(Serialize)]
+pub struct TaskDetail {
+    #[serde(flatten)]
+    row: TaskRow,
+    chapters: Vec<ChapterRow>,
+}
+
+/// 任务详情：任务行 + 章节级进度（断点续导依据）。
+#[tauri::command]
+pub fn get_task_detail(state: State<'_, AppState>, task_id: i64) -> Result<TaskDetail, String> {
+    let conn = state.db.lock().map_err(lock_err)?;
+    let row = conn
+        .query_row(
+            "SELECT t.id, t.book_id, COALESCE(b.title,''), COALESCE(b.cover_path,''), t.format, t.status,
+                    t.progress, COALESCE(t.current_stage,''), COALESCE(t.current_chapter,''),
+                    t.pages_done, t.words_done,
+                    (SELECT count(*) FROM task_chapters c WHERE c.task_id=t.id AND c.status='done'),
+                    t.created_at, t.started_at, t.finished_at, t.error_code, t.error_message, t.output_dir
+             FROM export_tasks t LEFT JOIN books b ON b.book_id = t.book_id WHERE t.id=?1",
+            [task_id],
+            |r| {
+                Ok(TaskRow {
+                    id: r.get(0)?,
+                    book_id: r.get(1)?,
+                    title: r.get(2)?,
+                    cover_path: r.get(3)?,
+                    format: r.get(4)?,
+                    status: r.get(5)?,
+                    progress: r.get(6)?,
+                    current_stage: r.get(7)?,
+                    current_chapter: r.get(8)?,
+                    pages_done: r.get(9)?,
+                    words_done: r.get(10)?,
+                    chapters_done: r.get(11)?,
+                    created_at: r.get(12)?,
+                    started_at: r.get(13)?,
+                    finished_at: r.get(14)?,
+                    error_code: r.get(15)?,
+                    error_message: r.get(16)?,
+                    output_dir: r.get(17)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| format!("查询任务失败: {e}"))?
+        .ok_or("任务不存在")?;
+    let mut stmt = conn
+        .prepare("SELECT chapter_idx, title, status FROM task_chapters WHERE task_id=?1 ORDER BY chapter_idx")
+        .map_err(|e| format!("查询章节失败: {e}"))?;
+    let chapters = stmt
+        .query_map([task_id], |r| {
+            Ok(ChapterRow {
+                chapter_idx: r.get(0)?,
+                title: r.get(1)?,
+                status: r.get(2)?,
+            })
+        })
+        .map_err(|e| format!("查询章节失败: {e}"))?
+        .map_while(Result::ok)
+        .collect();
+    Ok(TaskDetail { row, chapters })
+}
+
+/// 打开任务日志文件所在目录（stderr 全量日志，含脱敏）。
+#[tauri::command]
+pub fn reveal_task_log(state: State<'_, AppState>, task_id: i64) -> Result<(), String> {
+    let path = state.paths.logs.join(format!("task-{task_id}.log"));
+    if !path.exists() {
+        return Err("暂无任务日志".into());
+    }
+    tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| format!("打开失败: {e}"))
+}
+
+/// 定位任务的输出目录（目录取自数据库记录，非前端任意路径）。/// 定位导出文件（在文件管理器中显示该文件）。
+#[tauri::command]
+pub fn reveal_exported_file(state: State<'_, AppState>, id: i64) -> Result<(), String> {
+    let path: String = {
+        let conn = state.db.lock().map_err(lock_err)?;
+        conn.query_row("SELECT file_path FROM exported_files WHERE id=?1", [id], |r| r.get(0))
+            .optional()
+            .map_err(|e| format!("查询文件失败: {e}"))?
+            .ok_or("记录不存在")?
+    };
+    let p = std::path::PathBuf::from(&path);
+    if !p.is_file() {
+        return Err("文件不存在（可能已被移动或删除）".into());
+    }
+    tauri_plugin_opener::reveal_item_in_dir(&p).map_err(|e| format!("打开失败: {e}"))
+}
+
+/// 用户确认关闭后：强制终止所有引擎进程并退出应用。
+#[tauri::command]
+pub fn force_close(app: tauri::AppHandle, state: State<'_, AppState>) {
+    if let Ok(map) = state.running.lock() {
+        for rt in map.values() {
+            rt.worker.kill();
+        }
+    }
+    if let Ok(ops) = state.ops.lock() {
+        for w in ops.values() {
+            w.kill();
+        }
+    }
+    log::write("INFO", "force close: engine workers killed");
+    app.exit(0);
 }
 
 /// 定位任务的输出目录（目录取自数据库记录，非前端任意路径）。

@@ -10,6 +10,7 @@ import { applyTheme, watchSystemTheme } from "./stores/theme";
 import { useSettings } from "./stores/settings";
 import { useEngine, initEngineListener } from "./stores/engine";
 import { useAuth, initAuthListener } from "./stores/auth";
+import { CloseGuard } from "./features/close/CloseGuard";
 
 function CurrentPage() {
   const page = useNav((s) => s.page);
@@ -46,8 +47,11 @@ export default function App() {
   );
 
   return (
-    <AppShell>
-      <CurrentPage />
-    </AppShell>
+    <>
+      <AppShell>
+        <CurrentPage />
+      </AppShell>
+      <CloseGuard />
+    </>
   );
 }
