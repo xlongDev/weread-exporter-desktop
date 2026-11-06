@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type Page = "dashboard" | "tasks" | "library" | "settings";
+export type Page = "dashboard" | "export" | "tasks" | "library" | "settings";
 
 interface NavState {
   page: Page;

@@ -5,6 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, toAppError } from "../../services/api";
 import { useSettings } from "../../stores/settings";
 import { useEngine } from "../../stores/engine";
+import { useAuth } from "../../stores/auth";
 import { applyTheme, type ThemeMode } from "../../stores/theme";
 import type { PathsInfo } from "../../types";
 import { Button } from "../../components/Button";
@@ -15,6 +16,7 @@ import { StatusPill } from "../../components/StatusPill";
 export function Settings() {
   const { settings, loadError, load, set } = useSettings();
   const engine = useEngine();
+  const auth = useAuth();
   const [paths, setPaths] = useState<PathsInfo | null>(null);
   const [appVersion, setAppVersion] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
@@ -132,8 +134,12 @@ export function Settings() {
         </FieldRow>
         <FieldRow label="登录会话">
           <span className="text-sm text-muted">
-            微信读书登录态保存在本机浏览器配置目录，可随时在登录管理中清除。
+            微信读书登录态保存在本机浏览器配置目录，可随时清除。
           </span>
+          {auth.status === "in" && <StatusPill tone="positive">已登录</StatusPill>}
+          {auth.status === "out" && <StatusPill tone="neutral">未登录</StatusPill>}
+          {auth.status === "checking" && <StatusPill tone="neutral">检查中…</StatusPill>}
+          <Button onClick={() => void auth.logout()}>退出登录</Button>
         </FieldRow>
       </SettingSection>
 

@@ -242,3 +242,97 @@ pub fn cancel_task(state: State<'_, AppState>, task_id: i64) -> Result<(), Strin
         Err("任务不在可取消状态".into())
     }
 }
+
+/// 发起一次性引擎操作（登录 / 会话检查 / 书籍信息）。
+#[tauri::command]
+pub fn start_op(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    kind: String,
+    params: Value,
+) -> Result<String, String> {
+    let cmd = match kind.as_str() {
+        "auth_check" => "auth_check",
+        "login" => "login",
+        "book_info" => "book_info",
+        _ => return Err(format!("未知操作类型: {kind}")),
+    };
+    let op_id = format!("{kind}-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
+    let mut p = params;
+    if kind == "book_info" {
+        // 封面统一存到应用数据目录
+        let cover_dir = state.paths.app_data.join("covers");
+        p["cover_dir"] = Value::String(cover_dir.to_string_lossy().into_owned());
+    }
+    let _ = std::fs::create_dir_all(&state.paths.browser_profile);
+    manager::start_op(&app, &op_id, cmd, p, &state.paths.browser_profile, &state.paths.logs)?;
+    Ok(op_id)
+}
+
+/// 取消进行中的一次性操作（如等待扫码）。
+#[tauri::command]
+pub fn cancel_op(state: State<'_, AppState>, op_id: String) -> Result<(), String> {
+    let ops = state.ops.lock().map_err(|_| "ops 表锁损坏".to_string())?;
+    if let Some(w) = ops.get(&op_id) {
+        w.send_line(&protocol::command_line("cancel", Some(&op_id), None))
+    } else {
+        Err("操作不存在或已结束".into())
+    }
+}
+
+/// 退出登录：清空浏览器 profile（会话数据仅存于本机，docs/10 §4）。
+#[tauri::command]
+pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
+    let dir = &state.paths.browser_profile;
+    if dir.exists() {
+        std::fs::remove_dir_all(dir).map_err(|e| format!("清除会话失败: {e}"))?;
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("重建 profile 目录失败: {e}"))?;
+    log::write("INFO", "browser profile cleared (logout)");
+    Ok(())
+}
+
+/// 导入书籍（向导第一步完成时调用）：upsert books 表 + 校验封面路径。
+#[tauri::command]
+pub fn import_book(
+    state: State<'_, AppState>,
+    book_id: String,
+    title: String,
+    author: String,
+    intro: String,
+    cover_path: String,
+) -> Result<(), String> {
+    if !valid_book_id(&book_id) {
+        return Err("书籍 ID 格式无效".into());
+    }
+    if title.trim().is_empty() {
+        return Err("书名不能为空".into());
+    }
+    // 封面路径必须位于应用数据目录内（engine 事件中的路径，防御性校验）
+    let cover_in_app_data = {
+        if cover_path.is_empty() {
+            String::new()
+        } else {
+            let p = std::path::PathBuf::from(&cover_path);
+            let app_data = state.paths.app_data.clone();
+            match p.canonicalize() {
+                Ok(c) if c.starts_with(app_data.canonicalize().unwrap_or(app_data.clone())) => c.to_string_lossy().into_owned(),
+                _ => String::new(),
+            }
+        }
+    };
+    let meta = serde_json::json!({ "intro": intro });
+    let conn = state.db.lock().map_err(lock_err)?;
+    conn.execute(
+        "INSERT INTO books(book_id, title, author, cover_path, metadata_json, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))
+         ON CONFLICT(book_id) DO UPDATE SET
+           title=excluded.title, author=excluded.author,
+           cover_path=CASE WHEN excluded.cover_path != '' THEN excluded.cover_path ELSE books.cover_path END,
+           metadata_json=excluded.metadata_json, updated_at=datetime('now')",
+        rusqlite::params![book_id, title.trim(), author.trim(), cover_in_app_data, meta.to_string()],
+    )
+    .map_err(|e| format!("导入书籍失败: {e}"))?;
+    log::write("INFO", &format!("book imported: {book_id}"));
+    Ok(())
+}

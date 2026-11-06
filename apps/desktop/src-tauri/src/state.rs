@@ -18,6 +18,8 @@ pub struct AppState {
     pub paths: AppPaths,
     /// 正在运行的引擎任务（task_id → 运行句柄）
     pub running: Mutex<HashMap<i64, Arc<RunningTask>>>,
+    /// 一次性引擎操作（登录/会话检查/书籍信息；op_id → worker）
+    pub ops: Mutex<HashMap<String, Arc<crate::engine::worker::EngineWorker>>>,
 }
 
 pub fn paths_of() -> AppPaths {

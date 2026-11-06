@@ -133,6 +133,87 @@ pub fn engine_status_logged(app: &AppHandle) -> EngineStatus {
     }
 }
 
+/// 一次性引擎操作（登录 / 会话检查 / 书籍信息）：派生 worker、路由事件、终态后回收。
+/// 与任务的区别：不写任务状态机，只向前端转发事件（task_id 字段承载 op_id）。
+pub fn start_op<R: Runtime>(
+    app: &AppHandle<R>,
+    op_id: &str,
+    cmd: &str,
+    params: Value,
+    profile_dir: &std::path::Path,
+    logs_dir: &std::path::Path,
+) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    {
+        let ops = state.ops.lock().map_err(|_| "ops 表锁损坏")?;
+        if ops.contains_key(op_id) {
+            return Err("同名操作正在进行中".into());
+        }
+    }
+    let root = engine_root(app)?;
+    let python = resolve_python(&root);
+    let cwd = root.parent().ok_or("引擎目录缺少父目录")?.to_path_buf();
+    let worker = Arc::new(EngineWorker::spawn_with_profile(&python, &cwd, false, Some(profile_dir))?);
+    state
+        .ops
+        .lock()
+        .map_err(|_| "ops 表锁损坏")?
+        .insert(op_id.to_string(), worker.clone());
+
+    let log_path = logs_dir.join(format!("op-{op_id}.log"));
+    if let Ok(stderr) = worker.take_stderr() {
+        thread::spawn(move || {
+            let reader = std::io::BufReader::new(stderr);
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log_path)
+                .ok();
+            for line in reader.lines().map_while(Result::ok) {
+                let safe = crate::log::redact(&line);
+                if let Some(f) = file.as_mut() {
+                    use std::io::Write;
+                    let _ = writeln!(f, "{safe}");
+                }
+            }
+        });
+    }
+
+    let stdout = worker.take_stdout()?;
+    let op_id_owned = op_id.to_string();
+    let terminal = terminal_event_of(cmd).to_string();
+    let app_ev = app.clone();
+    let worker_for_route = worker.clone();
+    thread::spawn(move || {
+        let reader = std::io::BufReader::new(stdout);
+        for line in reader.lines().map_while(Result::ok) {
+            let Some(ev) = protocol::parse_line(&line) else { continue };
+            let is_mine = ev.task_id.as_deref() == Some(op_id_owned.as_str());
+            let _ = app_ev.emit("engine://event", &ev);
+            if is_mine && ev.event == terminal {
+                let _ = worker_for_route.send_line(&protocol::command_line("shutdown", None, None));
+                worker_for_route.close_and_wait_for_child();
+                if let Some(state) = app_ev.try_state::<AppState>()
+                    && let Ok(mut ops) = state.ops.lock()
+                {
+                    ops.remove(&op_id_owned);
+                }
+                break;
+            }
+        }
+    });
+
+    worker.send_line(&protocol::command_line(cmd, Some(op_id), Some(params)))?;
+    Ok(())
+}
+
+fn terminal_event_of(cmd: &str) -> &'static str {
+    match cmd {
+        "auth_check" | "login" => "auth.status",
+        "book_info" => "book.validation",
+        _ => "engine.shutdown",
+    }
+}
 /// 启动一次真实任务执行（worker 生命周期 + 事件路由）。
 pub fn start_task_run<R: Runtime>(
     app: AppHandle<R>,
@@ -146,11 +227,13 @@ pub fn start_task_run<R: Runtime>(
     let root = engine_root(&app)?;
     let python = resolve_python(&root);
     let cwd = root.parent().ok_or("引擎目录缺少父目录")?.to_path_buf();
+    let _ = std::fs::create_dir_all(&state.paths.browser_profile);
 
-    let worker = Arc::new(EngineWorker::spawn(
+    let worker = Arc::new(EngineWorker::spawn_with_profile(
         &python,
         &cwd,
         std::env::var("WEREAD_ENGINE_MOCK").as_deref() == Ok("1"),
+        Some(&state.paths.browser_profile),
     )?);
     let running = Arc::new(RunningTask {
         worker: worker.clone(),
@@ -579,6 +662,7 @@ mod tests {
             db: Mutex::new(db::open(&db_path).unwrap()),
             paths: crate::state::paths_of(),
             running: Mutex::new(HashMap::new()),
+            ops: Mutex::new(HashMap::new()),
         });
         unsafe { std::env::set_var("WEREAD_ENGINE_MOCK", "1") };
         let handle = app.handle().clone();

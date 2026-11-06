@@ -49,3 +49,30 @@ export interface EngineStatus {
   python_version: string;
   error: string | null;
 }
+
+/** 引擎 book.metadata 事件负载 */
+export interface BookMeta {
+  book_id: string;
+  title: string;
+  author: string;
+  intro: string;
+  cover_path: string;
+  logged_in?: boolean;
+}
+
+/** 引擎 book.validation 事件负载 */
+export interface BookValidation {
+  ok: boolean;
+  reason: string;
+  user_message: string;
+  logged_in?: boolean;
+}
+
+/** 引擎 auth.status 事件负载 */
+export interface AuthStatusData {
+  logged_in: boolean;
+  error?: string;
+  reason?: string;
+  cancelled?: boolean;
+  mock?: boolean;
+}

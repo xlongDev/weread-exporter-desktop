@@ -14,6 +14,16 @@ pub struct EngineWorker {
 impl EngineWorker {
     /// cwd 必须是包含 engine/ 包的目录（仓库根或打包资源根）。
     pub fn spawn(python_exe: &str, cwd: &Path, mock: bool) -> Result<EngineWorker, String> {
+        Self::spawn_with_profile(python_exe, cwd, mock, None)
+    }
+
+    /// 指定浏览器 profile 目录（WEREAD_PROFILE），桌面模式指向应用数据目录（docs/10 §4）。
+    pub fn spawn_with_profile(
+        python_exe: &str,
+        cwd: &Path,
+        mock: bool,
+        profile_dir: Option<&Path>,
+    ) -> Result<EngineWorker, String> {
         let mut cmd = Command::new(python_exe);
         cmd.args(["-m", "engine.adapter.worker"])
             .current_dir(cwd)
@@ -22,6 +32,9 @@ impl EngineWorker {
             .stderr(Stdio::piped());
         if mock {
             cmd.env("WEREAD_MOCK", "1");
+        }
+        if let Some(p) = profile_dir {
+            cmd.env("WEREAD_PROFILE", p);
         }
         let mut child = cmd
             .spawn()
