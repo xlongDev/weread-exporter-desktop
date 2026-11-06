@@ -44,7 +44,9 @@
   --control: #3a3a38;
   --text: #f0efed;
   --muted: #a3a09a;
-  --faint: #7a776f;
+  --faint: #8b8880;
+  --negative-text: #f0a7a9;
+  --warning-text: #e5c26a;
   --accent: #f0efed;
   --accent-ink: #141414;
   --data: #5b8fd9;

@@ -121,7 +121,7 @@ export function Library() {
         <span className="tnum ml-auto text-xs text-faint">{filtered.length} 个文件</span>
       </div>
 
-      {error && <p className="text-sm text-negative">{error}</p>}
+      {error && <p className="text-sm text-negative-text">{error}</p>}
 
       {files.length === 0 ? (
         <EmptyState
@@ -236,7 +236,7 @@ function MiniAction({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="flex h-7 w-7 items-center justify-center rounded-full bg-surface text-ink shadow-sm transition-colors hover:bg-raised disabled:opacity-40"
+      className="flex h-7 w-7 items-center justify-center rounded-full border border-line bg-surface text-ink transition-colors hover:bg-raised disabled:opacity-40"
     >
       {icon}
     </button>

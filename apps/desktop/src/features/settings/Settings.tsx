@@ -71,14 +71,14 @@ export function Settings() {
       <h1 className="text-2xl font-bold text-ink">设置</h1>
 
       {loadError && (
-        <p className="text-sm text-negative">
+        <p className="text-sm text-negative-text">
           设置读取失败：{loadError}
           <button className="ml-2 underline" onClick={() => void load()}>
             重试
           </button>
         </p>
       )}
-      {actionError && <p className="text-sm text-negative">{actionError}</p>}
+      {actionError && <p className="text-sm text-negative-text">{actionError}</p>}
 
       <SettingSection
         title="外观"

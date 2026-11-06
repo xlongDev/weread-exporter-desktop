@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FolderOpen, X } from "lucide-react";
+import { Check, FolderOpen, Minus, X } from "lucide-react";
 import { api, toAppError } from "../../services/api";
 import { useTasks } from "../../stores/tasks";
 import type { TaskDetail, TaskRow } from "../../types";
@@ -44,7 +44,7 @@ export function Tasks() {
       <h1 className="text-2xl font-bold text-ink">任务中心</h1>
 
       {loadError && (
-        <p className="text-sm text-negative">
+        <p className="text-sm text-negative-text">
           任务列表读取失败：{loadError}
           <button className="ml-2 underline" onClick={() => void load()}>
             重试
@@ -140,7 +140,7 @@ function TaskItem({ task, onOpen }: { task: TaskRow; onOpen: () => void }) {
             <p className="tnum text-xs text-muted">排队等待中（同一时刻执行一个抓取任务）</p>
           )}
           {task.status === "failed" && (
-            <p className="text-xs text-negative">
+            <p className="text-xs text-negative-text">
               {task.error_message ?? "任务失败"}
               {task.error_code && `（${task.error_code}）`}
             </p>
@@ -150,7 +150,7 @@ function TaskItem({ task, onOpen }: { task: TaskRow; onOpen: () => void }) {
               输出目录：{task.output_dir} · {elapsedText(task.started_at, task.finished_at)}
             </p>
           )}
-          {actionError && <p className="text-xs text-negative">{actionError}</p>}
+          {actionError && <p className="text-xs text-negative-text">{actionError}</p>}
         </div>
       </button>
 
@@ -243,7 +243,7 @@ function TaskDetailDrawer({
       }
     >
       {!detail && !error && <p className="text-sm text-faint">读取中…</p>}
-      {error && <p className="text-sm text-negative">{error}</p>}
+      {error && <p className="text-sm text-negative-text">{error}</p>}
       {detail && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-3">
@@ -283,12 +283,13 @@ function TaskDetailDrawer({
               <ul className="flex max-h-56 flex-col gap-1 overflow-y-auto rounded-card bg-[var(--well)] p-3">
                 {detail.chapters.map((c) => (
                   <li key={c.chapter_idx} className="flex items-center gap-2 text-xs">
-                    <span
-                      className={c.status === "done" ? "text-positive" : c.status === "failed" ? "text-negative" : "text-faint"}
-                      aria-hidden="true"
-                    >
-                      {c.status === "done" ? "✓" : c.status === "failed" ? "×" : "·"}
-                    </span>
+                    {c.status === "done" ? (
+                      <Check size={12} strokeWidth={2} className="flex-none text-positive" aria-label="已完成" />
+                    ) : c.status === "failed" ? (
+                      <X size={12} strokeWidth={2} className="flex-none text-negative" aria-label="失败" />
+                    ) : (
+                      <Minus size={12} strokeWidth={2} className="flex-none text-faint" aria-label="待处理" />
+                    )}
                     <span className="truncate text-muted">{c.title || `章节 ${c.chapter_idx}`}</span>
                   </li>
                 ))}
@@ -296,7 +297,7 @@ function TaskDetailDrawer({
             </div>
           )}
 
-          {actionError && <p className="text-sm text-negative">{actionError}</p>}
+          {actionError && <p className="text-sm text-negative-text">{actionError}</p>}
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => void revealLog()}>

@@ -20,12 +20,12 @@ export function Drawer({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/20" role="presentation" onClick={onClose}>
+    <div className="anim-overlay fixed inset-0 z-40 flex justify-end bg-black/20" role="presentation" onClick={onClose}>
       <aside
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="flex h-full w-[440px] max-w-[90vw] flex-col border-l border-line bg-surface shadow-[0_0_40px_rgba(0,0,0,0.14)]"
+        className="anim-drawer flex h-full w-[440px] max-w-[90vw] flex-col border-l border-line bg-surface shadow-[0_0_40px_rgba(0,0,0,0.14)]"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex flex-none items-center justify-between border-b border-rule px-5 py-3.5">

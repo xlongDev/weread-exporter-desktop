@@ -14,7 +14,7 @@ export function Dialog({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+      className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/30"
       role="presentation"
       onClick={onClose}
       onKeyDown={(e) => e.key === "Escape" && onClose()}
@@ -23,7 +23,7 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="mx-4 w-full max-w-[440px] rounded-card border border-line bg-surface p-5 shadow-[0_8px_32px_rgba(0,0,0,0.18)]"
+        className="anim-dialog mx-4 w-full max-w-[440px] rounded-card border border-line bg-surface p-5 shadow-[0_8px_32px_rgba(0,0,0,0.18)]"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-semibold text-ink">{title}</h2>
