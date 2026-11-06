@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  engine:
+    name: 引擎回归 (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: pytest
+        # 真实导出回归在 CI 无 output/ 数据时自动 skip（conftest/测试内已处理）
+        run: python -m pytest engine/tests -q
+
+  desktop:
+    name: 桌面端 (cargo + tsc + vitals)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: 安装 Linux 系统依赖（tauri 编译）
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: 前端依赖 + 类型检查 + 构建
+        working-directory: apps/desktop
+        run: |
+          npm install
+          npm run build
+      - name: cargo clippy
+        working-directory: apps/desktop/src-tauri
+        run: cargo clippy -- -D warnings
+      - name: cargo test
+        working-directory: apps/desktop/src-tauri
+        run: cargo test --lib
+      # 注意：engine_status/真实任务集成测试需要 python 子进程与 engine 源码，
+      # CI 的 CARGO_MANIFEST_DIR 相对路径在 ubuntu 下同样成立（仓库布局一致），故真实引擎测试也会运行；
+      # 无浏览器环境时引擎抓取类操作不可用，但测试中涉及浏览器启动的路径均为 mock 或纯导出，不受影响。
