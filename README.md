@@ -22,9 +22,11 @@
 
 | 平台 | 文件 | 状态 |
 | --- | --- | --- |
-| macOS (Apple Silicon) | `WeRead Exporter_x.y.z_aarch64.dmg` | ✅ 已验证 |
-| macOS (Intel) | `WeRead Exporter_x.y.z_x64.dmg` | ✅ 已构建（架构校验通过，真机运行待验收） |
-| Windows x64 | `WeRead Exporter_x.y.z_x64-setup.exe` | ⏳ 需 Windows 机器构建验收 |
+| macOS (Apple Silicon) | `WeRead Exporter_0.1.0_aarch64.dmg` | ✅ 已验证（本地 + CI 双产出） |
+| macOS (Intel) | `WeRead Exporter_0.1.0_x64.dmg` | ✅ 本地交叉构建（真机运行待验收） |
+| Windows x64 | `WeRead Exporter_0.1.0_x64-setup.exe` | ✅ CI 产出（NSIS，真机安装待验收） |
+
+仓库：https://github.com/xlongDev/weread-exporter-desktop （Actions → Release 构建 可随时重产三平台包；Intel 包用本地交叉构建命令）。
 
 macOS 未签名版本首次打开：右键点击应用 → 打开。
 

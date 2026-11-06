@@ -10,7 +10,7 @@
 
 ## 登录
 - [x] 能够启动登录浏览器（login op，可见窗口）
-- [ ] 能够完成真实扫码登录 ⏳（需人工扫码；协议链路已自动化验证）
+- [ ] 能够完成真实扫码登录 ⏳（需人工扫码；协议链路已自动化验证；超时路径已真实触发）
 - [x] 能够识别登录状态（真实 Cookie 检测 logged_in=true 实测）
 - [x] 能够识别会话失效（auth.status logged_in=false 路径）
 - [x] 能够退出登录（profile 目录清除）
@@ -50,7 +50,7 @@
 
 ## 交付
 - [x] macOS 安装包构建成功（.app 260MB / DMG 85MB）
-- [ ] Windows 安装包构建成功 ⏳（需 Windows 机器）
+- [x] Windows 安装包构建成功（GitHub Actions windows runner 产出 NSIS setup.exe 49MB，已下载归档 dist/）
 - [x] 独立安装后能够运行（~/Applications 拷贝实测，捆绑 Python 3.12.16 握手通过）
 - [x] 不需要用户手动安装开发依赖（运行时全内置）
 - [x] README 完整（见根目录）
