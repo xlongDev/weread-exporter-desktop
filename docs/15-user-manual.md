@@ -53,7 +53,11 @@
 ### 常见问题
 
 **Q：点登录没有反应 / 提示浏览器启动失败？**
-应用会优先使用系统已装的 Edge 或 Chrome。如果两者都没有，请在终端执行一次 `playwright install chromium`（可在应用数据目录的 runtime 下执行），或先安装 Chrome。
+应用会优先使用系统已装的 Edge 或 Chrome。如果两者都没有，可在终端执行一次（macOS）：
+
+    "$HOME/Library/Application Support/weread-exporter/runtime/bin/python3" -m playwright install chromium
+
+或直接安装 Chrome / Edge 后重试。
 
 **Q：提示"浏览器配置目录被占用"？**
 上一次导出的浏览器窗口还在后台运行。完全退出它再试。
