@@ -10,6 +10,7 @@
 
 - `apps/desktop/src-tauri/target/release/bundle/macos/WeRead Exporter.app`（260MB，自包含）
 - `apps/desktop/src-tauri/target/release/bundle/dmg/WeRead Exporter_0.1.0_aarch64.dmg`（85MB）
+- Intel 版：`target/x86_64-apple-darwin/release/bundle/dmg/WeRead Exporter_0.1.0_x64.dmg`（82MB，交叉构建，应用与捆绑 Python 均为 x86_64，真机运行待验收）
 - 全套文档：docs/00~15 + README + CHANGELOG
 
 ## 已完成
@@ -26,6 +27,7 @@
 
 - [ ] 真实扫码登录 UI 全流程（需人工扫码）
 - [ ] GUI 内真实书籍完整抓取 + 三格式导出
+- [ ] Intel 版 macOS 真机运行验收（x86_64 DMG 已产出）
 - [ ] Windows NSIS 安装包（脚本/icon.ico 就绪，需 Windows 机器）
 
 ## 未完成任务（按阶段）

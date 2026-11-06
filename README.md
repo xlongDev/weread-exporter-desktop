@@ -23,7 +23,7 @@
 | 平台 | 文件 | 状态 |
 | --- | --- | --- |
 | macOS (Apple Silicon) | `WeRead Exporter_x.y.z_aarch64.dmg` | ✅ 已验证 |
-| macOS (Intel) | 待构建（脚本支持） | — |
+| macOS (Intel) | `WeRead Exporter_x.y.z_x64.dmg` | ✅ 已构建（架构校验通过，真机运行待验收） |
 | Windows x64 | `WeRead Exporter_x.y.z_x64-setup.exe` | ⏳ 需 Windows 机器构建验收 |
 
 macOS 未签名版本首次打开：右键点击应用 → 打开。
