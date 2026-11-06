@@ -30,6 +30,7 @@ Rust 测试覆盖：SQLite 迁移（幂等 + 备份）、日志脱敏、协议�
 | **捆绑运行时引擎握手** | ✅ | 独立 .app 日志 `engine handshake ok: v0.1.0 (python 3.12.16)`（系统为 3.15，证明用的是捆绑运行时） |
 | 独立安装运行 | ✅ | .app 拷贝至 ~/Applications 独立运行握手通过 |
 | **CI 干净环境复现** | ✅ | GitHub Actions ubuntu：pytest 26 + clippy + cargo test + tsc 全绿（32min） |
+| **引擎与捆绑运行时版本兼容** | ✅ | 全量引擎测试在 python-build-standalone 3.12.16 下 29/29 通过（打包产物为 3.12，开发为 3.15 —— 双版本验证） |
 | **CI 三平台打包** | ✅ | Windows NSIS setup.exe（49MB）· macOS arm64 DMG（85MB，macos-latest）均由 CI 产出并下载归档；Intel 版由本地交叉构建交付 |
 | DMG 分发产物挂载 | ✅ | hdiutil 挂载双 DMG：Applications 链接 + 完整资源 |
 | 设置持久化 | ✅ | settings 表读写 + 主题即时生效（迁移测试 + UI 操作） |
