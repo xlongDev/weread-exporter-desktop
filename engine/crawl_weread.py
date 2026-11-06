@@ -43,6 +43,17 @@ def next_long_pause_at(step):
     return step + random.randint(*LONG_PAUSE_EVERY)
 
 
+async def sleep_cancellable(seconds, should_cancel=None, slice_sec=5.0):
+    """把长睡眠切成小片，取消指令最长 5 秒内生效（CLI 传 None 时行为不变：睡满）。"""
+    remaining = seconds
+    while remaining > 0:
+        if should_cancel and should_cancel():
+            return False
+        await asyncio.sleep(min(slice_sec, remaining))
+        remaining -= slice_sec
+    return True
+
+
 def get_crawl_state(book_dir):
     sf = os.path.join(book_dir, "_state.json")
     if os.path.exists(sf):
@@ -730,11 +741,15 @@ async def main(book_id_or_url, force=False, progress=None, should_cancel=None, o
                 await page.mouse.click(600, 450)
                 await page.keyboard.press("ArrowRight")
                 delay = random.uniform(*PAGE_DELAY_RANGE)
-                await asyncio.sleep(delay)
+                if not await sleep_cancellable(delay, should_cancel):
+                    cancelled = True
+                    break
                 if step >= long_pause_at:
                     pause = random.uniform(*LONG_PAUSE_RANGE)
                     print(f"  ⏸ 已抓取 {step} 页，触发温和长停顿 {pause:.0f} 秒...", flush=True)
-                    await asyncio.sleep(pause)
+                    if not await sleep_cancellable(pause, should_cancel):
+                        cancelled = True
+                        break
                     long_pause_at = next_long_pause_at(step)
 
             ok = await wait_stable_chars(page, timeout=2.2 if step > start_step else 5.0)
