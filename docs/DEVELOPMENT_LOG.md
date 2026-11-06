@@ -1,5 +1,17 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · Phase 4+5 登录导入与完整导出
+
+- **模块**：engine/adapter/worker.py（login/book_info ops）、Rust manager/commands/state（ops 管理、任务队列、list_tasks、reveal_task_dir、import_book、logout、asset 协议）、前端（auth store、登录卡、导出向导 4 步、任务中心实时列表、任务 store）
+- **内容**：
+  - 登录：login op 弹可见浏览器扫码（300s、可取消），auth_check 无头检测；profile 迁移至应用数据目录（WEREAD_PROFILE 注入）；logout 直接清除 profile 目录。
+  - 导入：book_info op 无头浏览器读取元数据 + 封面下载（cover_path 经 Rust 白名单校验后入库）；前端 wizard 第一步 + 书籍卡片。
+  - 向导：格式多选（每格式一个任务）→ 输出目录（原生目录选择器）→ 确认页（登录前置提示 + 预计任务说明）。
+  - 队列：enqueue_or_start + start_next_queued，同一时刻一个任务占用引擎；取消等待中任务时从队列移除。
+  - 任务中心：list_tasks（join books）+ engine://event 驱动刷新；真实进度条与章节/页/字数/耗时。
+- **测试**：pytest 26/26；cargo 13/13（新增：真实引擎全链路、队列串行化）；clippy/构建全绿；真实 Cookie 登录检测 ✅。
+- **关键修复**：①auth_check 事件缺 task_id（op 终态匹配失效）；②route_event 终态分支 DB 锁守卫作用域覆盖 start_next_queued → 同线程重入自死锁（队列测试抓出）——显式收敛锁作用域；③mock 标志显式传参消除测试环境变量竞态。
+
 ## 2026-11-07 · Phase 3 Python 引擎封装
 
 - **模块**：engine/（平移 + 协议 + 适配器 + 测试），apps/desktop/src-tauri/src/engine/（新），commands.rs，state.rs，lib.rs，run.bat

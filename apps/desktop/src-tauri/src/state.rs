@@ -1,7 +1,7 @@
 use crate::engine::manager::RunningTask;
 use rusqlite::Connection;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -20,6 +20,8 @@ pub struct AppState {
     pub running: Mutex<HashMap<i64, Arc<RunningTask>>>,
     /// 一次性引擎操作（登录/会话检查/书籍信息；op_id → worker）
     pub ops: Mutex<HashMap<String, Arc<crate::engine::worker::EngineWorker>>>,
+    /// 等待队列（浏览器 profile 单实例：同一时刻仅一个抓取任务）
+    pub queue: Mutex<VecDeque<crate::engine::manager::QueuedTask>>,
 }
 
 pub fn paths_of() -> AppPaths {

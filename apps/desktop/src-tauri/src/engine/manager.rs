@@ -30,6 +30,91 @@ pub fn engine_root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct QueuedTask {
+    pub task_id: i64,
+    pub book_id: String,
+    pub format: String,
+    pub output_dir: String,
+    pub options: Value,
+}
+
+/// 无运行中任务则立即启动；否则入队（浏览器 profile 单实例，docs/02 #5）。
+pub fn enqueue_or_start<R: Runtime>(app: &AppHandle<R>, qt: QueuedTask) -> Result<bool, String> {
+    let state = app.state::<AppState>();
+    let idle = {
+        let running = state.running.lock().map_err(|_| "运行表锁损坏")?;
+        running.is_empty()
+    };
+    if idle {
+        start_task_run(
+            app.clone(),
+            qt.task_id,
+            qt.book_id,
+            qt.format,
+            qt.output_dir,
+            qt.options,
+            std::env::var("WEREAD_ENGINE_MOCK").as_deref() == Ok("1"),
+        )?;
+        return Ok(true);
+    }
+    state
+        .queue
+        .lock()
+        .map_err(|_| "队列锁损坏")?
+        .push_back(qt);
+    Ok(false)
+}
+
+/// 任务终态后调用：若队列有等待任务则启动下一个（跳过已取消的）。
+fn start_next_queued<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<AppState>();
+    let next = {
+        let running = match state.running.lock() {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+        if !running.is_empty() {
+            return;
+        }
+        let mut queue = match state.queue.lock() {
+            Ok(q) => q,
+            Err(_) => return,
+        };
+        loop {
+            match queue.pop_front() {
+                Some(qt) => {
+                    let cancelled = state.db.lock().ok().and_then(|c| {
+                        c.query_row(
+                            "SELECT status FROM export_tasks WHERE id=?1",
+                            [qt.task_id],
+                            |r| r.get::<_, String>(0),
+                        )
+                        .ok()
+                    });
+                    if cancelled.as_deref() != Some("cancelled") {
+                        break Some(qt);
+                    }
+                }
+                None => break None,
+            }
+        }
+    };
+    if let Some(qt) = next
+        && let Err(e) = start_task_run(
+            app.clone(),
+            qt.task_id,
+            qt.book_id,
+            qt.format,
+            qt.output_dir,
+            qt.options,
+            std::env::var("WEREAD_ENGINE_MOCK").as_deref() == Ok("1"),
+        )
+    {
+        log::write("ERROR", &format!("启动排队任务失败: {e}"));
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct OutputFile {
     pub format: String,
@@ -222,6 +307,7 @@ pub fn start_task_run<R: Runtime>(
     format: String,
     output_dir: String,
     options: Value,
+    mock: bool,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
     let root = engine_root(&app)?;
@@ -232,7 +318,7 @@ pub fn start_task_run<R: Runtime>(
     let worker = Arc::new(EngineWorker::spawn_with_profile(
         &python,
         &cwd,
-        std::env::var("WEREAD_ENGINE_MOCK").as_deref() == Ok("1"),
+        mock,
         Some(&state.paths.browser_profile),
     )?);
     let running = Arc::new(RunningTask {
@@ -325,16 +411,19 @@ fn route_event<R: Runtime>(app: &AppHandle<R>, engine_task_id: &str, running: &A
                 *t = Some(ev.event.clone());
             }
             let state = app.state::<AppState>();
-            let conn = match state.db.lock() {
-                Ok(c) => c,
-                Err(e) => {
-                    log::write("ERROR", &format!("任务事件落库失败（DB 锁）: {e}"));
-                    return;
+            {
+                // 锁作用域显式收敛：后续 start_next_queued 需要再次取 DB 锁（不可重入）
+                let conn = match state.db.lock() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        log::write("ERROR", &format!("任务事件落库失败（DB 锁）: {e}"));
+                        return;
+                    }
+                };
+                let mut outputs = running.outputs.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
+                if let Err(e) = apply_task_event(&conn, engine_task_id, &ev, &mut outputs) {
+                    log::write("ERROR", &format!("任务事件落库失败: {e}"));
                 }
-            };
-            let mut outputs = running.outputs.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
-            if let Err(e) = apply_task_event(&conn, engine_task_id, &ev, &mut outputs) {
-                log::write("ERROR", &format!("任务事件落库失败: {e}"));
             }
             // 任务结束：通知 worker 退出并回收
             let _ = running
@@ -346,6 +435,7 @@ fn route_event<R: Runtime>(app: &AppHandle<R>, engine_task_id: &str, running: &A
             {
                 map.remove(&id);
             }
+            start_next_queued(app);
         }
         _ => {
             // 进度类事件落库
@@ -392,6 +482,7 @@ fn finalize_on_exit<R: Runtime>(app: &AppHandle<R>, engine_task_id: &str, runnin
     {
         map.remove(&id);
     }
+    start_next_queued(app);
     log::write("WARN", &format!("任务 {engine_task_id} 的引擎进程在终态事件前退出"));
 }
 
@@ -663,11 +754,19 @@ mod tests {
             paths: crate::state::paths_of(),
             running: Mutex::new(HashMap::new()),
             ops: Mutex::new(HashMap::new()),
+            queue: Mutex::new(std::collections::VecDeque::new()),
         });
-        unsafe { std::env::set_var("WEREAD_ENGINE_MOCK", "1") };
         let handle = app.handle().clone();
-        start_task_run(handle, task_id, "mockbook123".into(), "markdown".into(), dir.to_string_lossy().into_owned(), serde_json::json!({}))
-            .expect("启动 mock 任务失败");
+        start_task_run(
+            handle,
+            task_id,
+            "mockbook123".into(),
+            "markdown".into(),
+            dir.to_string_lossy().into_owned(),
+            serde_json::json!({}),
+            true,
+        )
+        .expect("启动 mock 任务失败");
 
         // 轮询等待终态（mock 回放 <1s）
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
@@ -694,6 +793,197 @@ mod tests {
             .query_row("SELECT count(*) FROM exported_files WHERE task_id=?1", [task_id], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 1, "completed 应记录产物");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn full_task_run_with_real_engine_and_data() {
+        // 真实引擎（非 mock）+ 仓库真实抓取数据 → Markdown 导出全链路。
+        // 数据复制到隔离临时目录，不触碰真实 output/。
+        use crate::db;
+        use std::collections::HashMap;
+
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../");
+        let output_dir_repo = repo.join("output");
+        let Ok(entries) = std::fs::read_dir(&output_dir_repo) else {
+            eprintln!("跳过：仓库无 output/ 数据");
+            return;
+        };
+        let book_dir = entries
+            .flatten()
+            .map(|e| e.path())
+            .find(|p| p.is_dir() && p.to_string_lossy().ends_with("_v2"));
+        let Some(book_dir) = book_dir else {
+            eprintln!("跳过：output/ 内无书籍数据目录");
+            return;
+        };
+        let book_id = book_dir.file_name().unwrap().to_string_lossy().to_string();
+        let book_id = book_id.strip_suffix("_v2").unwrap().to_string();
+
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let dir = std::env::temp_dir().join(format!("weread-real-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let data_dir = dir.join("data");
+        std::fs::create_dir_all(&data_dir).unwrap();
+        // 仅复制 chapters 与 meta（导出 markdown 所需），避免拷贝整包 raw/插图
+        let src = book_dir.clone();
+        let dst = data_dir.join(format!("{book_id}_v2"));
+        std::fs::create_dir_all(dst.join("chapters")).unwrap();
+        for entry in std::fs::read_dir(src.join("chapters")).unwrap().flatten() {
+            let _ = std::fs::copy(entry.path(), dst.join("chapters").join(entry.file_name()));
+        }
+        for f in ["meta.json"] {
+            let _ = std::fs::copy(src.join(f), dst.join(f));
+        }
+
+        let db_path = dir.join("t.db");
+        let mut conn = db::open(&db_path).unwrap();
+        db::migrate(&mut conn, &db_path).unwrap();
+        conn.execute(
+            "INSERT INTO books(book_id, title) VALUES (?1, '真实回归书')",
+            [&book_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO export_tasks(book_id, format, output_dir, status) VALUES (?1, 'markdown', ?2, 'waiting')",
+            rusqlite::params![book_id, data_dir.to_string_lossy().into_owned()],
+        )
+        .unwrap();
+        let task_id = conn.last_insert_rowid();
+        drop(conn);
+
+        app.manage(AppState {
+            db: Mutex::new(db::open(&db_path).unwrap()),
+            paths: crate::state::paths_of(),
+            running: Mutex::new(HashMap::new()),
+            ops: Mutex::new(HashMap::new()),
+            queue: Mutex::new(std::collections::VecDeque::new()),
+        });
+        let handle = app.handle().clone();
+        start_task_run(
+            handle,
+            task_id,
+            book_id.clone(),
+            "markdown".into(),
+            data_dir.to_string_lossy().into_owned(),
+            serde_json::json!({"skip_crawl": true}),
+            false,
+        )
+        .expect("启动真实任务失败");
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        let mut status = String::from("waiting");
+        while std::time::Instant::now() < deadline {
+            let state = app.state::<AppState>();
+            let conn = state.db.lock().unwrap();
+            status = conn
+                .query_row("SELECT status FROM export_tasks WHERE id=?1", [task_id], |r| r.get(0))
+                .unwrap();
+            drop(conn);
+            drop(state);
+            if status == "completed" || status == "failed" {
+                break;
+            }
+            thread::sleep(std::time::Duration::from_millis(200));
+        }
+        assert_eq!(status, "completed", "真实引擎导出应完成");
+        eprintln!("[real-test] status={status}");
+        let (n, total_size): (i64, i64) = app
+            .state::<AppState>()
+            .db
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT count(*), COALESCE(sum(file_size),0) FROM exported_files WHERE task_id=?1",
+                [task_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert!(n >= 1, "应记录产物文件");
+        assert!(total_size > 0, "产物应有真实大小");
+        eprintln!("[real-test] outputs={n} total_size={total_size}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn task_queue_serializes_execution() {
+        // 队列约束：同一时刻仅一个任务占用引擎（浏览器 profile 单实例）。
+        use crate::db;
+        use std::collections::HashMap;
+
+        unsafe { std::env::set_var("WEREAD_ENGINE_MOCK", "1") };
+
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let dir = std::env::temp_dir().join(format!("weread-queue-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("t.db");
+        let mut conn = db::open(&db_path).unwrap();
+        db::migrate(&mut conn, &db_path).unwrap();
+        for bid in ["bookaaa111", "bookbbb222"] {
+            conn.execute("INSERT INTO books(book_id, title) VALUES (?1, '队列书')", [bid]).unwrap();
+        }
+        let mk_task = |bid: &str| -> i64 {
+            conn.execute(
+                "INSERT INTO export_tasks(book_id, format, output_dir, status) VALUES (?1, 'markdown', '/tmp', 'waiting')",
+                [bid],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        let t1 = mk_task("bookaaa111");
+        let t2 = mk_task("bookbbb222");
+        drop(conn);
+
+        app.manage(AppState {
+            db: Mutex::new(db::open(&db_path).unwrap()),
+            paths: crate::state::paths_of(),
+            running: Mutex::new(HashMap::new()),
+            ops: Mutex::new(HashMap::new()),
+            queue: Mutex::new(std::collections::VecDeque::new()),
+        });
+        let handle = app.handle().clone();
+
+        let started1 = enqueue_or_start(
+            &handle,
+            QueuedTask { task_id: t1, book_id: "bookaaa111".into(), format: "markdown".into(), output_dir: dir.to_string_lossy().into_owned(), options: serde_json::json!({}) },
+        )
+        .unwrap();
+        assert!(started1, "空闲时应立即启动");
+        let started2 = enqueue_or_start(
+            &handle,
+            QueuedTask { task_id: t2, book_id: "bookbbb222".into(), format: "markdown".into(), output_dir: dir.to_string_lossy().into_owned(), options: serde_json::json!({}) },
+        )
+        .unwrap();
+        assert!(!started2, "占用时应排队");
+
+        // 两个任务都应最终完成（队列依次启动）
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        loop {
+            let state = app.state::<AppState>();
+            let statuses: Vec<String> = {
+                let c = state.db.lock().unwrap();
+                let mut stmt = c.prepare("SELECT status FROM export_tasks ORDER BY id").unwrap();
+                let rows = stmt.query_map([], |r| r.get(0)).unwrap();
+                rows.map_while(Result::ok).collect()
+            };
+            drop(state);
+            if statuses.iter().all(|s| s != "running" && s != "waiting")
+                || std::time::Instant::now() > deadline
+            {
+                assert!(
+                    statuses.iter().all(|s| s == "completed"),
+                    "两个任务都应完成，实际: {statuses:?}"
+                );
+                break;
+            }
+            thread::sleep(std::time::Duration::from_millis(150));
+        }
         unsafe { std::env::remove_var("WEREAD_ENGINE_MOCK") };
         let _ = std::fs::remove_dir_all(&dir);
     }

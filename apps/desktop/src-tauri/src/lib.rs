@@ -33,6 +33,7 @@ pub fn run() {
             paths: paths.clone(),
             running: std::sync::Mutex::new(std::collections::HashMap::new()),
             ops: std::sync::Mutex::new(std::collections::HashMap::new()),
+            queue: std::sync::Mutex::new(std::collections::VecDeque::new()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_stats,
@@ -41,8 +42,10 @@ pub fn run() {
             commands::get_paths,
             commands::reveal_path,
             commands::engine_status,
+            commands::list_tasks,
             commands::create_task,
             commands::cancel_task,
+            commands::reveal_task_dir,
             commands::start_op,
             commands::cancel_op,
             commands::logout,

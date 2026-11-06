@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppError, EngineStatus, PathsInfo, SettingsMap, Stats } from "../types";
+import type { AppError, EngineStatus, PathsInfo, SettingsMap, Stats, TaskRow } from "../types";
 
 /** 将 Rust command / IPC 异常归一为 AppError */
 export function toAppError(e: unknown): AppError {
@@ -30,7 +30,9 @@ export const api = {
   logout: () => invoke<void>("logout"),
   importBook: (b: { bookId: string; title: string; author: string; intro: string; coverPath: string }) =>
     invoke<void>("import_book", b),
+  listTasks: (limit = 50) => invoke<TaskRow[]>("list_tasks", { limit }),
   createTask: (bookId: string, format: string, outputDir?: string) =>
     invoke<number>("create_task", { bookId, format, outputDir }),
   cancelTask: (taskId: number) => invoke<void>("cancel_task", { taskId }),
+  revealTaskDir: (taskId: number) => invoke<void>("reveal_task_dir", { taskId }),
 };
