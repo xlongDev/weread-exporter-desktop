@@ -6,6 +6,13 @@
 
 **Phase 8+9 - 打包与终验** → 完成（Windows 打包待真实 Windows 机器）
 
+## CI/CD（已上线）
+
+- 仓库：https://github.com/xlongDev/weread-exporter-desktop （公开）
+- ci.yml：push/PR 自动回归（pytest + clippy + cargo test + tsc）—— 首跑即绿
+- release.yml：tag v* 或手动触发 —— Windows NSIS（49MB）与 macOS arm64 DMG（85MB）已由 CI 产出
+- dist/（本地）：aarch64.dmg 85MB · x64.dmg 82MB（本地交叉构建）· x64-setup.exe 49MB（CI 产出）
+
 ## 交付物
 
 - `apps/desktop/src-tauri/target/release/bundle/macos/WeRead Exporter.app`（260MB，自包含）
