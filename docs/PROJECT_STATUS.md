@@ -4,17 +4,16 @@
 
 ## 当前阶段
 
-**Phase 0 - 仓库审计** → 完成，进入 Phase 1（产品与架构设计）
+**Phase 1 - 产品与架构设计** → 完成，进入 Phase 2（桌面工程骨架）
 
 ## 已完成
 
-- [x] Phase 0：全量源码审计（crawl_weread.py / export_book.py / main.py / README / LICENSE / 依赖）
-- [x] 引擎导入冒烟验证 + 真实导出产物证据确认（《脆弱的心》EPUB/PDF/MD）
-- [x] 功能复用分类（docs/01）、技术风险清单（docs/02）、迁移方案（docs/03）
+- [x] Phase 0：全量源码审计 + 功能复用分类 + 风险清单 + 迁移方案
+- [x] Phase 1：04-PRD / 05-用户流程 / 06-系统架构 / 07-数据库设计 / 08-引擎协议 v1 / 09-UI 设计系统（taste-skill 正式发牌 achromatic-ledger）/ 10-安全设计 / 11-测试策略
 
 ## 进行中
 
-- [ ] Phase 1：PRD / 用户流程 / 系统架构 / 数据库设计 / 引擎协议 / UI 设计系统 / 安全方案 / 测试策略
+- [ ] Phase 2：Tauri 2 + React + TS 工程骨架、设计 Token、主题、基础组件、SQLite 迁移、原生能力
 
 ## 未完成任务（按阶段）
 
