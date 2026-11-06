@@ -39,6 +39,16 @@ pub struct QueuedTask {
     pub options: Value,
 }
 
+/// 引擎进程启动失败：任务显式 failed（避免永久停留等待态）。
+fn mark_task_spawn_failed(conn: &Connection, task_id: i64, message: &str) {
+    let _ = conn.execute(
+        "UPDATE export_tasks SET status='failed', error_code='ENGINE_SPAWN_FAILED',
+         error_message=?2, finished_at=datetime('now'), updated_at=datetime('now')
+         WHERE id=?1 AND status IN ('waiting','running')",
+        rusqlite::params![task_id, message],
+    );
+}
+
 /// 无运行中任务则立即启动；否则入队（浏览器 profile 单实例，docs/02 #5）。
 pub fn enqueue_or_start<R: Runtime>(app: &AppHandle<R>, qt: QueuedTask) -> Result<bool, String> {
     let state = app.state::<AppState>();
@@ -47,15 +57,21 @@ pub fn enqueue_or_start<R: Runtime>(app: &AppHandle<R>, qt: QueuedTask) -> Resul
         running.is_empty()
     };
     if idle {
-        start_task_run(
+        if let Err(e) = start_task_run(
             app.clone(),
             qt.task_id,
-            qt.book_id,
-            qt.format,
-            qt.output_dir,
-            qt.options,
+            qt.book_id.clone(),
+            qt.format.clone(),
+            qt.output_dir.clone(),
+            qt.options.clone(),
             std::env::var("WEREAD_ENGINE_MOCK").as_deref() == Ok("1"),
-        )?;
+        ) {
+            let state = app.state::<AppState>();
+            if let Ok(conn) = state.db.lock() {
+                mark_task_spawn_failed(&conn, qt.task_id, &e);
+            }
+            return Err(e);
+        }
         return Ok(true);
     }
     state
@@ -104,14 +120,18 @@ fn start_next_queued<R: Runtime>(app: &AppHandle<R>) {
         && let Err(e) = start_task_run(
             app.clone(),
             qt.task_id,
-            qt.book_id,
-            qt.format,
-            qt.output_dir,
-            qt.options,
+            qt.book_id.clone(),
+            qt.format.clone(),
+            qt.output_dir.clone(),
+            qt.options.clone(),
             std::env::var("WEREAD_ENGINE_MOCK").as_deref() == Ok("1"),
         )
     {
         log::write("ERROR", &format!("启动排队任务失败: {e}"));
+        let state = app.state::<AppState>();
+        if let Ok(conn) = state.db.lock() {
+            mark_task_spawn_failed(&conn, qt.task_id, &e);
+        }
     }
 }
 
@@ -643,6 +663,14 @@ pub fn test_conn() -> Connection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex as StdMutex;
+
+    /// 所有派生 worker 的测试共享：进程级环境变量不可并行读写
+    static ENV_LOCK: StdMutex<()> = StdMutex::new(());
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
 
     fn seed_task(conn: &Connection) -> i64 {
         conn.execute(
@@ -756,6 +784,7 @@ mod tests {
             ops: Mutex::new(HashMap::new()),
             queue: Mutex::new(std::collections::VecDeque::new()),
         });
+        let _env = env_lock();
         let handle = app.handle().clone();
         start_task_run(
             handle,
@@ -862,6 +891,7 @@ mod tests {
             ops: Mutex::new(HashMap::new()),
             queue: Mutex::new(std::collections::VecDeque::new()),
         });
+        let _env = env_lock();
         let handle = app.handle().clone();
         start_task_run(
             handle,
@@ -949,6 +979,7 @@ mod tests {
         });
         let handle = app.handle().clone();
 
+        let _env = env_lock();
         let started1 = enqueue_or_start(
             &handle,
             QueuedTask { task_id: t1, book_id: "bookaaa111".into(), format: "markdown".into(), output_dir: dir.to_string_lossy().into_owned(), options: serde_json::json!({}) },
@@ -986,5 +1017,42 @@ mod tests {
         }
         unsafe { std::env::remove_var("WEREAD_ENGINE_MOCK") };
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spawn_failure_marks_task_failed() {
+        // 引擎进程启动失败 → 任务必须显式 failed（ENGINE_SPAWN_FAILED），而非永久等待
+        let conn = test_conn();
+        conn.execute("INSERT INTO books(book_id, title) VALUES ('bookfail123', 'X')", []).unwrap();
+        conn.execute(
+            "INSERT INTO export_tasks(book_id, format, output_dir, status) VALUES ('bookfail123', 'markdown', '/tmp', 'waiting')",
+            [],
+        )
+        .unwrap();
+        let task_id = conn.last_insert_rowid();
+
+        mark_task_spawn_failed(&conn, task_id, "启动引擎进程失败 (测试)");
+
+        let (status, code, msg): (String, String, String) = conn
+            .query_row(
+                "SELECT status, COALESCE(error_code,''), COALESCE(error_message,'') FROM export_tasks WHERE id=?1",
+                [task_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(status, "failed");
+        assert_eq!(code, "ENGINE_SPAWN_FAILED");
+        assert!(msg.contains("测试"));
+        // completed 终态任务不应被改写
+        conn.execute(
+            "UPDATE export_tasks SET status='completed' WHERE id=?1",
+            [task_id],
+        )
+        .unwrap();
+        mark_task_spawn_failed(&conn, task_id, "不应生效");
+        let status: String = conn
+            .query_row("SELECT status FROM export_tasks WHERE id=?1", [task_id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(status, "completed", "终态不可被启动失败覆盖");
     }
 }

@@ -49,6 +49,8 @@ Windows 构建：同一命令（资源脚本自动选 x86_64 运行时），需�
 
 ## 🧪 测试
 
+**只想用命令行？** 引擎仍可独立运行：`.venv/bin/python engine/main.py <书籍链接或ID>`（Windows: `run.bat`）。
+
 ```bash
 .venv/bin/python -m pytest engine/tests -q     # 引擎回归（含真实数据导出）
 cd apps/desktop/src-tauri && cargo test --lib  # 桌面端（含全链路集成）
