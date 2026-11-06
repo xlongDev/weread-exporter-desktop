@@ -42,6 +42,7 @@ assemble_runtime() {
   local src="$CACHE/python-${PYTHON_BS_TAG}-${PY_ARCH}"
   local dst="$RES/runtime"
   if [ "$IS_WINDOWS" = "1" ]; then dst="$RES/runtime/python"; fi
+  mkdir -p "$(dirname "$dst")"
   # windows: install_only 解压根目录自带 python.exe → runtime/python/
   rm -rf "$dst"
   cp -R "$src" "$dst"
