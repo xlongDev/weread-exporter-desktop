@@ -24,8 +24,14 @@ apps/desktop/src-tauri/gen/
 # macOS AppleDouble
 ._*
 
-# Phase 8 打包资源（脚本组装，不入库）
-apps/desktop/src-tauri/resources/
+# Phase 8 打包资源（脚本组装，不入库；仅保留校验用占位文件）
+apps/desktop/src-tauri/resources/*
+!apps/desktop/src-tauri/resources/engine/
+!apps/desktop/src-tauri/resources/runtime/
+apps/desktop/src-tauri/resources/engine/*
+!apps/desktop/src-tauri/resources/engine/.placeholder
+apps/desktop/src-tauri/resources/runtime/*
+!apps/desktop/src-tauri/resources/runtime/.placeholder
 
 # 本地汇总的发布产物
 dist/
