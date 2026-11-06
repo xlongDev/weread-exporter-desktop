@@ -24,8 +24,9 @@
 
 ## 3. 前端测试（vitest，已实现 ✅）
 
-- utils/bookId：书籍 ID 解析（与引擎 extract_book_id 用例对齐）+ Rust 白名单规则对齐（11 项）。
+- utils/bookId：书籍 ID 解析（与引擎 extract_book_id 用例对齐）+ Rust 白名单规则对齐。
 - services：toAppError 错误归一（字符串/Error/未知类型）。
+- stores（IPC 全 mock）：engine 握手与 engine.error 事件转换、settings 读写缓存一致性、tasks 拉取与失败不清空、auth 事件驱动状态机（waiting/in/out/超时提示）——共 22 项。
 - 运行：`npm run test`（CI 桌面端 job 已接入）。
 
 ## 4. UI 走查（人工 + 脚本辅助）
