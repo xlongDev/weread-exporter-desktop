@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { api, toAppError } from "../services/api";
+import { useTasks } from "./tasks";
 
 export type EngineStateStatus = "unknown" | "checking" | "ready" | "error";
 
@@ -35,13 +36,17 @@ export const useEngine = create<EngineStore>((set) => ({
 
 let unlisten: UnlistenFn | null = null;
 
-/** 订阅引擎事件流（engine.error → 状态更新）；任务事件由任务模块消费 */
+/** 订阅引擎事件流：引擎状态 + 任务事件刷新任务列表 */
 export async function initEngineListener(): Promise<void> {
   if (unlisten) return;
   unlisten = await listen("engine://event", (event) => {
     const ev = event.payload as { event?: string };
     if (ev?.event === "engine.error") {
       useEngine.setState({ status: "error" });
+    }
+    if (ev?.event?.startsWith("task.")) {
+      // 任务事件：SQLite 已由 Rust 路由更新，这里刷新前端投影
+      void useTasks.getState().load();
     }
   });
 }

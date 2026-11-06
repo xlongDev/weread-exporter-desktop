@@ -76,3 +76,25 @@ export interface AuthStatusData {
   cancelled?: boolean;
   mock?: boolean;
 }
+
+/** 任务列表行（Rust list_tasks） */
+export interface TaskRow {
+  id: number;
+  book_id: string;
+  title: string;
+  cover_path: string;
+  format: string;
+  status: "waiting" | "running" | "completed" | "cancelled" | "failed";
+  progress: number;
+  current_stage: string;
+  current_chapter: string;
+  pages_done: number;
+  words_done: number;
+  chapters_done: number;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  output_dir: string;
+}

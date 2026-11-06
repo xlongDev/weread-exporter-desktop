@@ -209,7 +209,21 @@ pub fn create_task(
     };
     log::write("INFO", &format!("task {task_id} created: {book_id} -> {format}"));
 
-    manager::start_task_run(app, task_id, book_id, format, dir, serde_json::json!({}))?;
+    let started = manager::enqueue_or_start(
+        &app,
+        manager::QueuedTask {
+            task_id,
+            book_id,
+            format,
+            output_dir: dir,
+            options: serde_json::json!({}),
+        },
+    )?;
+    if started {
+        log::write("INFO", &format!("task {task_id} started immediately"));
+    } else {
+        log::write("INFO", &format!("task {task_id} queued"));
+    }
     Ok(task_id)
 }
 
@@ -228,6 +242,10 @@ pub fn cancel_task(state: State<'_, AppState>, task_id: i64) -> Result<(), Strin
             ));
         }
     }
+    {
+        let mut queue = state.queue.lock().map_err(|_| "队列锁损坏".to_string())?;
+        queue.retain(|qt| qt.task_id != task_id);
+    }
     let conn = state.db.lock().map_err(lock_err)?;
     let n = conn
         .execute(
@@ -241,6 +259,73 @@ pub fn cancel_task(state: State<'_, AppState>, task_id: i64) -> Result<(), Strin
     } else {
         Err("任务不在可取消状态".into())
     }
+}
+
+#[derive(Serialize)]
+pub struct TaskRow {
+    id: i64,
+    book_id: String,
+    title: String,
+    cover_path: String,
+    format: String,
+    status: String,
+    progress: f64,
+    current_stage: String,
+    current_chapter: String,
+    pages_done: i64,
+    words_done: i64,
+    chapters_done: i64,
+    created_at: String,
+    started_at: Option<String>,
+    finished_at: Option<String>,
+    error_code: Option<String>,
+    error_message: Option<String>,
+    output_dir: String,
+}
+
+#[tauri::command]
+pub fn list_tasks(state: State<'_, AppState>, limit: i64) -> Result<Vec<TaskRow>, String> {
+    let conn = state.db.lock().map_err(lock_err)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT t.id, t.book_id, b.title, COALESCE(b.cover_path,''), t.format, t.status,
+                    t.progress, COALESCE(t.current_stage,''), COALESCE(t.current_chapter,''),
+                    t.pages_done, t.words_done,
+                    (SELECT count(*) FROM task_chapters c WHERE c.task_id=t.id AND c.status='done'),
+                    t.created_at, t.started_at, t.finished_at, t.error_code, t.error_message, t.output_dir
+             FROM export_tasks t LEFT JOIN books b ON b.book_id = t.book_id
+             ORDER BY t.created_at DESC, t.id DESC LIMIT ?1",
+        )
+        .map_err(|e| format!("查询任务失败: {e}"))?;
+    let rows = stmt
+        .query_map([limit], |r| {
+            Ok(TaskRow {
+                id: r.get(0)?,
+                book_id: r.get(1)?,
+                title: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                cover_path: r.get(3)?,
+                format: r.get(4)?,
+                status: r.get(5)?,
+                progress: r.get(6)?,
+                current_stage: r.get(7)?,
+                current_chapter: r.get(8)?,
+                pages_done: r.get(9)?,
+                words_done: r.get(10)?,
+                chapters_done: r.get(11)?,
+                created_at: r.get(12)?,
+                started_at: r.get(13)?,
+                finished_at: r.get(14)?,
+                error_code: r.get(15)?,
+                error_message: r.get(16)?,
+                output_dir: r.get(17)?,
+            })
+        })
+        .map_err(|e| format!("查询任务失败: {e}"))?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row.map_err(|e| format!("读取任务行失败: {e}"))?);
+    }
+    Ok(out)
 }
 
 /// 发起一次性引擎操作（登录 / 会话检查 / 书籍信息）。
@@ -290,6 +375,30 @@ pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("重建 profile 目录失败: {e}"))?;
     log::write("INFO", "browser profile cleared (logout)");
     Ok(())
+}
+
+/// 定位任务的输出目录（目录取自数据库记录，非前端任意路径）。
+#[tauri::command]
+pub fn reveal_task_dir(state: State<'_, AppState>, task_id: i64) -> Result<(), String> {
+    let dir: String = {
+        let conn = state.db.lock().map_err(lock_err)?;
+        conn.query_row(
+            "SELECT output_dir FROM export_tasks WHERE id=?1",
+            [task_id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("查询任务失败: {e}"))?
+        .ok_or("任务不存在")?
+    };
+    let p = std::path::PathBuf::from(&dir);
+    let p = if p.exists() {
+        p.canonicalize().map_err(|e| format!("目录不可访问: {e}"))?
+    } else {
+        std::fs::create_dir_all(&p).map_err(|e| format!("目录不存在且创建失败: {e}"))?;
+        p
+    };
+    tauri_plugin_opener::reveal_item_in_dir(&p).map_err(|e| format!("打开失败: {e}"))
 }
 
 /// 导入书籍（向导第一步完成时调用）：upsert books 表 + 校验封面路径。

@@ -4,19 +4,17 @@
 
 ## 当前阶段
 
-**Phase 3 - Python 引擎封装** → 完成（待生产构建验证收尾），进入 Phase 4（登录与书籍导入）
+**Phase 5 - 完整导出功能** → 完成，进入 Phase 6（任务管理与本地书库）
 
 ## 已完成
 
-- [x] Phase 0：全量源码审计 + 功能复用分类 + 风险清单 + 迁移方案
-- [x] Phase 1：04~11 全套设计文档（含 taste-skill 发牌设计系统）
-- [x] Phase 2：Tauri 2 + React 19 + TS strict 工程；设计 Token（浅/深）；基础组件；SQLite 迁移；设置持久化；日志脱敏；最小 capability/CSP
-- [x] Phase 3：引擎三文件平移至 engine/（CLI 保持可用，BASE 自适应仓库根）；crawl/export 增加可选 progress / should_cancel / output_dir 参数（默认行为不变）；protocol.py（v1）；adapter/worker.py（stdin 指令 / stdout 协议行 / stderr 日志 + Mock 模式）；Rust engine 模块（worker.rs 子进程管理 + protocol.rs 解析 + manager.rs 任务状态机 + 全链路集成测试）；create_task / cancel_task / engine_status 命令；引擎握手预热 + 前端事件订阅；pytest 回归 25/25（含真实数据导出回归）
+- [x] Phase 0~3（详见 DEVELOPMENT_LOG）
+- [x] Phase 4：登录与书籍导入 —— worker login（可见浏览器扫码 300s + 取消）/ book_info（元数据 + 封面下载 + 可访问性校验）；Rust ops 管理（独立事件路由、取消、profile 迁移至应用数据目录）；前端 auth store + 登录卡（等待扫码/超时/取消态）+ 书籍导入页；logout 清除 profile；asset 协议展示封面；真实 Cookie 登录态检测验证通过
+- [x] Phase 5：导出向导 4 步（选书→格式多选→选项→确认，登录前置检查）；每格式一个任务 + **任务队列串行执行**（浏览器 profile 单实例约束）；list_tasks 命令；任务中心实时列表（真实进度条/章节/页/字数/耗时、取消、打开输出目录）；真实引擎全链路 Rust 测试（真实 python + 真实书籍数据 → 2 个 Markdown 产物 239KB）+ 队列串行化测试（**发现并修复 route_event DB 锁自死锁**）
 
 ## 进行中
 
-- [ ] Phase 3 收尾：`tauri build` 生产构建验证（进行中）
-- [ ] Phase 4：登录与书籍导入（auth_check 弹窗扫码 / book_info 元数据 / books 表落库 / 导出向导第一步）
+- [ ] Phase 6：任务详情抽屉、书库页面（封面墙/搜索/打开/删除确认）、断点续导（继续导出/重新导出）、重试
 
 ## 未完成任务（按阶段）
 
@@ -35,7 +33,6 @@
 
 ## 测试状态
 
-- 引擎：pytest 25/25 ✅（纯函数 / 协议解析 / Worker 子进程 Mock 集成 / 真实数据导出回归）
-- 桌面端：cargo test 11/11 ✅（迁移 ×2 + 脱敏 + 协议解析 ×3 + python 解析 + 任务状态机 ×2 + 全链路 Mock 集成）· clippy -D warnings ✅ · tsc strict + vite build ✅
-- 真机验证：**正式 .app 产物（tauri build）页面加载 ✅、前端 invoke ✅**；开发模式（tauri dev）引擎握手 ✅、Rust 派生真实 python worker ✅（日志 `engine handshake ok: v0.1.0 (python 3.15.2)`）
-- 已知观察：①裸 `cargo build`（非 tauri CLI 路径）的嵌入式资产页面不加载 —— 官方路径无影响，以 tauri build 产物为准；②生产 .app 引擎握手失败为预期（engine/Python 运行时资源打包在 Phase 8 实施），UI 如实显示"引擎异常"
+- 引擎：pytest 26/26 ✅（+mock 登录/book_info 事件回归）
+- 桌面端：cargo test 13/13 ✅（+真实引擎全链路 + 队列串行化）· clippy -D warnings ✅ · tsc strict + vite build ✅
+- 真机验证：正式 .app 页面加载 ✅；开发模式引擎握手/worker 派生 ✅；真实 Cookie 登录检测（logged_in=true）✅；真实引擎导出全链路（2 产物 239KB）✅
