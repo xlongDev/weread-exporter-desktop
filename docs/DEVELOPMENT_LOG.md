@@ -1,5 +1,12 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · 前端测试层补齐 + GitHub Release
+
+- **模块**：apps/desktop（vitest.config.ts、bookId/api/stores 三组测试）、CONTRIBUTING.md（新增）、.github/workflows/release.yml（Release 自动挂载）、README/docs
+- **内容**：前端 vitest 22 项 —— bookId 与引擎/Rust 三层规则对齐、toAppError 归一、四个 store 的 IPC 全 mock 测试（engine 握手与事件转换 / settings 读写缓存一致性 / tasks 拉取与失败不清空 / auth 事件驱动状态机）；GitHub Release v0.1.0 发布（三平台产物 + SHA256SUMS 公开下载）；release.yml tag 构建自动挂载 Release；CONTRIBUTING.md（环境/门禁/发版/诚实性与安全红线）。
+- **测试**：vitest 22/22 · pytest 29/29 · cargo 14/14 · CI 线上全绿。
+- **修复**：listen mock 的展开参数类型（tsc strict TS2556/TS6133）。
+
 ## 2026-11-07 · 真实抓取验收与取消响应性改进
 
 - **模块**：engine/crawl_weread.py（sleep_cancellable）、engine/tests/test_crawl_cancel.py（新增）
