@@ -95,6 +95,10 @@ mkdir -p "$RES/engine/adapter"
 cp "$ROOT/engine/crawl_weread.py" "$ROOT/engine/export_book.py" "$ROOT/engine/main.py" \
    "$ROOT/engine/protocol.py" "$ROOT/engine/__init__.py" "$RES/engine/"
 cp "$ROOT/engine/adapter/worker.py" "$ROOT/engine/adapter/__init__.py" "$RES/engine/adapter/"
+# 恢复 tauri-build 校验用的占位文件（脚本整目录重建会抹掉它们；CI 新鲜 checkout 依赖）
+printf '构建占位：真实资源由 scripts/prepare-runtime.sh 在打包前组装（见 docs/03）。\n' > "$RES/engine/.placeholder"
+mkdir -p "$RES/runtime"
+printf '构建占位：真实资源由 scripts/prepare-runtime.sh 在打包前组装（见 docs/03）。\n' > "$RES/runtime/.placeholder"
 echo "runtime: $PY_ARCH"
 
 echo "resources 就绪: $(du -sh "$RES" | cut -f1)"
