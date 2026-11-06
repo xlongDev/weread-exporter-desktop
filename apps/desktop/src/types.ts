@@ -98,3 +98,28 @@ export interface TaskRow {
   error_message: string | null;
   output_dir: string;
 }
+
+/** 书库文件行（Rust list_files） */
+export interface LibraryFile {
+  id: number;
+  book_id: string;
+  title: string;
+  author: string;
+  cover_path: string;
+  format: string;
+  file_path: string;
+  file_name: string;
+  file_size: number;
+  exists_ok: boolean;
+  created_at: string;
+}
+
+/** 章节进度行 */
+export interface ChapterRow {
+  chapter_idx: number;
+  title: string;
+  status: "pending" | "done" | "failed";
+}
+
+/** 任务详情（任务行 + 章节进度） */
+export type TaskDetail = TaskRow & { chapters: ChapterRow[] };

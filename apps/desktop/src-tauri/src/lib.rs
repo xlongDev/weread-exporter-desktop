@@ -5,6 +5,7 @@ mod log;
 mod state;
 
 use state::{paths_of, AppState};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -46,6 +47,13 @@ pub fn run() {
             commands::create_task,
             commands::cancel_task,
             commands::reveal_task_dir,
+            commands::list_files,
+            commands::open_file,
+            commands::reveal_exported_file,
+            commands::delete_exported_file,
+            commands::get_task_detail,
+            commands::reveal_task_log,
+            commands::force_close,
             commands::start_op,
             commands::cancel_op,
             commands::logout,
@@ -60,6 +68,22 @@ pub fn run() {
                 let _ = engine::manager::engine_status_logged(&handle);
             });
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // 任务运行时关闭窗口 → 前端确认（docs/05 F8）
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let state: tauri::State<AppState> = window.app_handle().state();
+                let busy = state
+                    .running
+                    .lock()
+                    .map(|m| !m.is_empty())
+                    .unwrap_or(false);
+                if busy {
+                    api.prevent_close();
+                    use tauri::Emitter;
+                    let _ = window.app_handle().emit("app://close-requested", ());
+                }
+            }
         })
         .on_page_load(|_webview, payload| {
             log::write("INFO", &format!("page load [{:?}]: {}", payload.event(), payload.url()));

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppError, EngineStatus, PathsInfo, SettingsMap, Stats, TaskRow } from "../types";
+import type { AppError, EngineStatus, PathsInfo, SettingsMap, Stats, TaskRow, LibraryFile, TaskDetail } from "../types";
 
 /** 将 Rust command / IPC 异常归一为 AppError */
 export function toAppError(e: unknown): AppError {
@@ -31,8 +31,15 @@ export const api = {
   importBook: (b: { bookId: string; title: string; author: string; intro: string; coverPath: string }) =>
     invoke<void>("import_book", b),
   listTasks: (limit = 50) => invoke<TaskRow[]>("list_tasks", { limit }),
-  createTask: (bookId: string, format: string, outputDir?: string) =>
-    invoke<number>("create_task", { bookId, format, outputDir }),
+  createTask: (bookId: string, format: string, outputDir?: string, resumedFrom?: number) =>
+    invoke<number>("create_task", { bookId, format, outputDir, resumedFrom }),
   cancelTask: (taskId: number) => invoke<void>("cancel_task", { taskId }),
   revealTaskDir: (taskId: number) => invoke<void>("reveal_task_dir", { taskId }),
+  revealTaskLog: (taskId: number) => invoke<void>("reveal_task_log", { taskId }),
+  getTaskDetail: (taskId: number) => invoke<TaskDetail>("get_task_detail", { taskId }),
+  listFiles: () => invoke<LibraryFile[]>("list_files"),
+  openFile: (id: number) => invoke<void>("open_file", { id }),
+  revealExportedFile: (id: number) => invoke<void>("reveal_exported_file", { id }),
+  deleteExportedFile: (id: number, deleteFile: boolean) =>
+    invoke<void>("delete_exported_file", { id, deleteFile }),
 };

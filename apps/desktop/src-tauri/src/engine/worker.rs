@@ -76,6 +76,14 @@ impl EngineWorker {
             .ok_or_else(|| "引擎 stderr 已被取走".to_string())
     }
 
+    /// 强制终止（应用退出时使用；优雅路径走 close_and_wait_for_child）。
+    pub fn kill(&self) {
+        if let Ok(mut child) = self.child.lock() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+
     /// 关闭 stdin（worker 收到 EOF 后按协议优雅退出）并回收进程。
     pub fn close_and_wait_for_child(&self) {
         let _ = self.stdin.lock().map(|mut g| g.take());
