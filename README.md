@@ -49,6 +49,10 @@ npx tauri build
 
 Windows 构建：同一命令（资源脚本自动选 x86_64 运行时），需在 Windows 机器上执行。
 
+## 🤝 参与
+
+见 [CONTRIBUTING.md](CONTRIBUTING.md)：环境搭建、四层测试门禁、提交与发版约定。
+
 ## 🧪 测试
 
 **只想用命令行？** 引擎仍可独立运行：`.venv/bin/python engine/main.py <书籍链接或ID>`（Windows: `run.bat`）。
