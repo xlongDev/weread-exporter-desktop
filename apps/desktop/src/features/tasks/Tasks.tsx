@@ -5,6 +5,7 @@ import { useTasks } from "../../stores/tasks";
 import type { TaskDetail, TaskRow } from "../../types";
 import { Button } from "../../components/Button";
 import { BookCover } from "../../components/BookCover";
+import { Dialog } from "../../components/Dialog";
 import { Drawer } from "../../components/Drawer";
 import { StatusPill, type PillTone } from "../../components/StatusPill";
 
@@ -34,14 +35,62 @@ const FORMAT_LABEL: Record<string, string> = {
 export function Tasks() {
   const { tasks, loadError, load } = useTasks();
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearError, setClearError] = useState<string | null>(null);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const clearable = tasks.filter((t) => t.status !== "running" && t.status !== "waiting").length;
+
+  async function clearFinished() {
+    try {
+      await api.clearFinishedTasks();
+      setConfirmClear(false);
+      setClearError(null);
+      await load();
+    } catch (e) {
+      setClearError(toAppError(e).userMessage);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-ink">任务中心</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-ink">任务中心</h1>
+        {tasks.length > 0 && (
+          <Button
+            variant="ghost"
+            disabled={clearable === 0}
+            title={clearable === 0 ? "没有可清除的已结束任务" : undefined}
+            onClick={() => setConfirmClear(true)}
+          >
+            清除记录
+          </Button>
+        )}
+      </div>
+      {clearError && <p className="text-sm text-negative-text">{clearError}</p>}
+
+      {confirmClear && (
+        <Dialog
+          title="清除已结束的任务记录？"
+          onClose={() => setConfirmClear(false)}
+          actions={
+            <>
+              <Button variant="ghost" onClick={() => setConfirmClear(false)}>
+                取消
+              </Button>
+              <Button onClick={() => void clearFinished()}>清除</Button>
+            </>
+          }
+        >
+          <p className="tnum">
+            将删除 {clearable} 条已完成 / 已取消 / 已失败的任务记录（进行中与排队中的不受影响）。
+          </p>
+          <p className="text-xs text-faint">已导出的文件与书库记录不会被删除。</p>
+        </Dialog>
+      )}
 
       {loadError && (
         <p className="text-sm text-negative-text">

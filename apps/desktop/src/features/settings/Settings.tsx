@@ -67,7 +67,7 @@ export function Settings() {
   const outputDir = (settings?.["general.output_dir"] as string) ?? paths?.default_output_dir ?? "";
 
   return (
-    <div className="flex max-w-[1152px] flex-col gap-8">
+    <div className="flex max-w-[980px] min-w-0 flex-col gap-8">
       <h1 className="text-2xl font-bold text-ink">设置</h1>
 
       {loadError && (
@@ -106,7 +106,7 @@ export function Settings() {
         description="导出文件的默认保存位置。每次导出前也可以临时更改。"
       >
         <FieldRow label="默认导出目录">
-          <span className="selectable max-w-[420px] truncate text-sm text-muted" title={outputDir}>
+          <span className="selectable min-w-0 flex-1 truncate text-sm text-muted" title={outputDir}>
             {outputDir || "—"}
           </span>
           <Button onClick={() => void pickOutputDir()}>选择目录…</Button>
@@ -125,7 +125,7 @@ export function Settings() {
       >
         <FieldRow label="数据目录">
           <span
-            className="selectable max-w-[420px] truncate text-sm text-muted"
+            className="selectable min-w-0 flex-1 truncate text-sm text-muted"
             title={paths?.app_data}
           >
             {paths?.app_data ?? "—"}
@@ -133,8 +133,8 @@ export function Settings() {
           <Button onClick={() => void revealDataDir()}>打开</Button>
         </FieldRow>
         <FieldRow label="登录会话">
-          <span className="text-sm text-muted">
-            微信读书登录态保存在本机浏览器配置目录，可随时清除。
+          <span className="min-w-0 flex-1 text-sm text-muted">
+            登录态保存在本机浏览器配置目录，可随时清除。
           </span>
           {auth.status === "in" && <StatusPill tone="positive">已登录</StatusPill>}
           {auth.status === "out" && <StatusPill tone="neutral">未登录</StatusPill>}
@@ -195,20 +195,20 @@ function SettingSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="grid grid-cols-[440px_1fr] gap-6 border-t border-rule pt-8 first:border-t-0 first:pt-0">
+    <section className="grid grid-cols-1 gap-4 border-t border-rule pt-8 first:border-t-0 first:pt-0 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-6">
       <div className="flex flex-col gap-1.5">
         <h2 className="text-base font-semibold">{title}</h2>
         <p className="text-sm text-muted">{description}</p>
       </div>
-      <div className="flex flex-col gap-4 rounded-2xl bg-[var(--well)] p-4">{children}</div>
+      <div className="flex min-w-0 flex-col gap-4 rounded-2xl bg-[var(--well)] p-4">{children}</div>
     </section>
   );
 }
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-4">
-      <span className="w-28 flex-none text-sm font-medium">{label}</span>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+      <span className="w-24 flex-none text-sm font-medium">{label}</span>
       {children}
     </div>
   );

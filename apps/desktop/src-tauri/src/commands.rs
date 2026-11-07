@@ -561,7 +561,40 @@ pub fn reveal_task_log(state: State<'_, AppState>, task_id: i64) -> Result<(), S
     tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| format!("打开失败: {e}"))
 }
 
-/// 定位任务的输出目录（目录取自数据库记录，非前端任意路径）。/// 定位导出文件（在文件管理器中显示该文件）。
+/// 清除已结束的任务历史（completed/cancelled/failed）；进行中的任务不受影响。
+pub fn clear_finished_tasks_conn(conn: &Connection) -> Result<u64, String> {
+    Ok(conn
+        .execute(
+            "DELETE FROM export_tasks WHERE status IN ('completed','cancelled','failed')",
+            [],
+        )
+        .map_err(|e| format!("清除任务历史失败: {e}"))? as u64)
+}
+
+#[tauri::command]
+pub fn clear_finished_tasks(state: State<'_, AppState>) -> Result<u64, String> {
+    let conn = state.db.lock().map_err(lock_err)?;
+    let n = clear_finished_tasks_conn(&conn)?;
+    log::write("INFO", &format!("cleared {n} finished tasks"));
+    Ok(n)
+}
+
+/// 一键清除书库记录（仅记录，磁盘文件不动）。
+pub fn clear_library_records_conn(conn: &Connection) -> Result<u64, String> {
+    Ok(conn
+        .execute("DELETE FROM exported_files", [])
+        .map_err(|e| format!("清除书库记录失败: {e}"))? as u64)
+}
+
+#[tauri::command]
+pub fn clear_library_records(state: State<'_, AppState>) -> Result<u64, String> {
+    let conn = state.db.lock().map_err(lock_err)?;
+    let n = clear_library_records_conn(&conn)?;
+    log::write("INFO", &format!("cleared {n} library records"));
+    Ok(n)
+}
+
+/// 定位导出文件（在文件管理器中显示该文件）。
 #[tauri::command]
 pub fn reveal_exported_file(state: State<'_, AppState>, id: i64) -> Result<(), String> {
     let path: String = {

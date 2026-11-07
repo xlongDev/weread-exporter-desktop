@@ -20,7 +20,7 @@ export function Button({ variant = "secondary", className = "", children, ...res
   return (
     <button
       {...rest}
-      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] px-3 text-sm transition-colors disabled:cursor-not-allowed ${variantClass[variant]} ${className}`}
+      className={`inline-flex h-9 flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] px-3 text-sm transition-colors disabled:cursor-not-allowed ${variantClass[variant]} ${className}`}
     >
       {children}
     </button>
