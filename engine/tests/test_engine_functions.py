@@ -1,6 +1,8 @@
 """引擎核心纯函数回归（无网络、无浏览器）。"""
 import os
 
+import pytest
+
 import crawl_weread
 import export_book
 
@@ -172,3 +174,75 @@ def test_rebuild_and_read_book_in_custom_dir(tmp_path):
     assert root == str(book_dir)
     assert len(texts) == 1
     assert "第一章" in texts[0]
+
+
+# ---------- 封面（download_cover / EPUB 封面页） ----------
+
+def test_download_cover_skips_when_present(tmp_path):
+    cover = tmp_path / "cover.jpg"
+    cover.write_bytes(b"x" * 600)
+    # 无效 URL 若被请求必然抛错；已有封面时应直接跳过且返回路径
+    assert crawl_weread.download_cover(str(tmp_path), "http://127.0.0.1:1/nope.jpg") == str(cover)
+
+
+def test_download_cover_no_url(tmp_path):
+    assert crawl_weread.download_cover(str(tmp_path), "") == ""
+
+
+def test_build_epub_embeds_cover(tmp_path):
+    md = pytest.importorskip("markdown")
+    pytest.importorskip("ebooklib")
+    book_id = "testbook123456"
+    book_dir = tmp_path / f"{book_id}_v2"
+    (book_dir / "chapters").mkdir(parents=True)
+    (book_dir / "cover.jpg").write_bytes(b"\xff\xd8\xff\xe0fakejpeg" + b"x" * 600)
+    (book_dir / "chapters" / "0001.md").write_text("# 第一章\n\n正文内容。", encoding="utf-8")
+
+    root, texts = export_book.read_book(book_id, output_dir=str(tmp_path))
+    out = export_book.build_epub(book_id, root, "测试书", "作者", texts, output_dir=str(tmp_path))
+    assert out
+    import zipfile
+    names = zipfile.ZipFile(out).namelist()
+    assert "EPUB/cover.jpg" in names
+    assert "EPUB/cover.xhtml" in names
+    opf = zipfile.ZipFile(out).read("EPUB/content.opf").decode("utf-8")
+    assert 'properties="cover-image"' in opf
+    assert "<itemref idref=" in opf and "cover" in opf
+
+
+def test_download_cover_force_failure_keeps_old_file(tmp_path):
+    cover = tmp_path / "cover.jpg"
+    cover.write_bytes(b"x" * 600)
+    # force 重新下载失败时，不得破坏已有封面
+    assert crawl_weread.download_cover(str(tmp_path), "http://127.0.0.1:1/nope.jpg", force=True) == ""
+    assert cover.read_bytes() == b"x" * 600
+
+
+def test_parse_book_detail_html():
+    html = (
+        '<meta property="og:title" content="存在主义及其他">'
+        '<meta property="og:image" content="https://cdn.weread.qq.com/x/t6_x.jpg">'
+        '<meta property="og:description" content="费希特问：国家的目的是什么？">'
+        '<script>window.__INITIAL_STATE__={"sState":{"reader":{"bookInfo":'
+        '{"bookId":"638162","title":"存在主义及其他","author":"陈嘉映",'
+        '"cover":"https://rescdn.qqmail.com/weread/cover/606/606606/s_606606.jpg",'
+        '"intro":"串书的简介","publisher":"广西师范大学出版社"}}}}</script>'
+    )
+    m = crawl_weread.parse_book_detail_html(html)
+    # 封面/简介以 og（正确源）为准，bookInfo 里串书的 cover/intro 不得泄漏
+    assert m["title"] == "存在主义及其他"
+    assert m["cover"] == "https://cdn.weread.qq.com/x/t6_x.jpg"
+    assert m["intro"] == "费希特问：国家的目的是什么？"
+    assert m["author"] == "陈嘉映"
+    assert m["publisher"] == "广西师范大学出版社"
+
+
+def test_parse_book_detail_html_fallback_cover():
+    html = (
+        '<meta property="og:title" content="某书">'
+        '<script>window.__INITIAL_STATE__={"reader":{"bookInfo":'
+        '{"bookId":"1","title":"某书","author":"某人","cover":"https://c/s_1.jpg"}}}</script>'
+    )
+    m = crawl_weread.parse_book_detail_html(html)
+    assert m["cover"] == "https://c/s_1.jpg"  # og 缺失时回退 bookInfo
+    assert m["intro"] == ""

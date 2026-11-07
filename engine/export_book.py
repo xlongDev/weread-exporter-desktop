@@ -4,7 +4,7 @@
 将已抓取的书籍章节一键导出为：
 1. 纯 Markdown 笔记版 (.md)：引用块格式，适配 Obsidian / Notion / Logseq
 2. HTML 样式版 Markdown (.md)：保留精细排版语义标签
-3. 标准 EPUB 电子书 (.epub)：双字体 CSS 排版，内嵌目录树与原书高清配图
+3. 标准 EPUB 电子书 (.epub)：双字体 CSS 排版，内嵌封面页、目录树与原书高清配图
 4. 大字号出版级精排 PDF (.pdf)：跨平台字体栈（Mac/Win/Linux），带封面、可点击目录、侧边栏书签大纲与页码
 """
 import asyncio
@@ -202,6 +202,12 @@ def build_epub(book_id, root, title, author, texts, output_dir=None, progress=No
     if author:
         book.add_author(author)
 
+    cover_path = os.path.join(root, "cover.jpg")
+    has_cover = os.path.isfile(cover_path) and os.path.getsize(cover_path) > 500
+    if has_cover:
+        with open(cover_path, "rb") as f:
+            book.set_cover("cover.jpg", f.read())
+
     css_text = """
     body { font-family: "Songti SC", "SimSun", "Noto Serif CJK SC", serif; line-height: 1.85; font-size: 1em; margin: 0.6em 0.8em; }
     h1 { font-size: 1.35em; margin: 1.2em 0 0.9em; text-align: center; }
@@ -239,7 +245,7 @@ def build_epub(book_id, root, title, author, texts, output_dir=None, progress=No
     book.toc = tuple(toc)
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
-    book.spine = ["nav"] + items
+    book.spine = (["cover"] if has_cover else []) + ["nav"] + items
 
     safe = re.sub(r'[<>:"/\\|?*]', "_", title) or book_id
     out_epub = os.path.join(output_dir if output_dir else os.path.join(BASE, "output"), f"{safe}（双字体精排）.epub")
@@ -487,6 +493,12 @@ async def main(book_id_or_url, output_dir=None, formats=None, progress=None):
             title = m.get("title", title)
             author = m.get("author", "")
             intro = m.get("intro", "")
+        # 旧版本抓取可能没下封面：按 meta 链接自动补下（幂等，已有则跳过）
+        try:
+            import crawl_weread
+            crawl_weread.download_cover(root, m.get("cover", ""))
+        except Exception as e:
+            print(f"⚠️ 封面补下跳过: {e}")
 
     wanted = formats if formats else ["markdown", "epub", "pdf"]
     print(f"\n📦 开始导出电子书: 《{title}》 -> {', '.join(wanted)}")
