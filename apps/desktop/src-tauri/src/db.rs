@@ -50,6 +50,21 @@ pub fn migrate(conn: &mut Connection, db_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 应用启动时清扫上次退出遗留的僵尸任务：running/waiting 在新进程里必然无活进程，
+/// 统一标记为 failed（可清除、可继续导出）。返回清扫数量。
+pub fn sweep_interrupted_tasks(conn: &Connection) -> Result<usize, String> {
+    let n = conn
+        .execute(
+            "UPDATE export_tasks SET status='failed', error_code='APP_EXITED',
+             error_message='应用退出导致任务中断，已抓取内容不会丢失，可继续导出',
+             finished_at=datetime('now'), updated_at=datetime('now')
+             WHERE status IN ('running','waiting')",
+            [],
+        )
+        .map_err(|e| format!("清扫中断任务失败: {e}"))?;
+    Ok(n)
+}
+
 fn backup(db_path: &Path, from_version: u32) {
     // WAL 库先 checkpoint 再整文件复制，保证备份自洽
     let _ = std::fs::copy(db_path, db_path.with_extension(format!("bak-v{from_version}")));
@@ -102,6 +117,51 @@ mod tests {
         // settings 键唯一约束生效
         conn.execute("INSERT INTO settings(key, value) VALUES ('a', '1')", []).unwrap();
         assert!(conn.execute("INSERT INTO settings(key, value) VALUES ('a', '2')", []).is_err());
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn sweep_marks_only_zombie_tasks() {
+        let path = tmp_db("sweep");
+        let mut conn = open(&path).unwrap();
+        migrate(&mut conn, &path).unwrap();
+        conn.execute("INSERT INTO books(book_id, title) VALUES ('bkzombie123', 'Z')", []).unwrap();
+        for (bid, st) in [
+            ("bz1running", "running"),
+            ("bz2waiting", "waiting"),
+            ("bz3completed", "completed"),
+            ("bz4failed", "failed"),
+        ] {
+            conn.execute(
+                &format!("INSERT INTO books(book_id, title) VALUES ('{bid}', 'T')"),
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                &format!(
+                    "INSERT INTO export_tasks(book_id, format, output_dir, status) VALUES ('{bid}', 'markdown', '/tmp', '{st}')"
+                ),
+                [],
+            )
+            .unwrap();
+        }
+        let n = sweep_interrupted_tasks(&conn).unwrap();
+        assert_eq!(n, 2, "只清扫 running/waiting");
+        let rows: Vec<(String, String, Option<String>)> = {
+            let mut stmt = conn
+                .prepare("SELECT book_id, status, error_code FROM export_tasks ORDER BY book_id")
+                .unwrap();
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                .unwrap()
+                .map_while(Result::ok)
+                .collect()
+        };
+        let get = |bid: &str| rows.iter().find(|(b, _, _)| b == bid).unwrap();
+        assert_eq!(get("bz1running").1, "failed");
+        assert_eq!(get("bz1running").2.as_deref(), Some("APP_EXITED"));
+        assert_eq!(get("bz2waiting").1, "failed");
+        assert_eq!(get("bz3completed").1, "completed", "终态不受影响");
+        assert_eq!(get("bz4failed").1, "failed");
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
