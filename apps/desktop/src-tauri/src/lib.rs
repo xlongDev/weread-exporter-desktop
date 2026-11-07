@@ -23,6 +23,11 @@ pub fn run() {
         },
         Err(e) => panic!("{e}"),
     };
+    match db::sweep_interrupted_tasks(&conn) {
+        Ok(n) if n > 0 => log::write("INFO", &format!("swept {n} interrupted tasks from previous session")),
+        Ok(_) => {}
+        Err(e) => log::write("WARN", &format!("sweep failed: {e}")),
+    }
     log::write("INFO", "app starting");
 
     // 启动预热：后台握手一次引擎（结果缓存于日志；前端仍可随时主动握手）

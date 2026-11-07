@@ -52,7 +52,8 @@ pub fn get_stats(state: State<'_, AppState>) -> Result<Stats, String> {
         conn.query_row(sql, [], |r| r.get(0)).map_err(|e| format!("统计查询失败: {e}"))
     };
     Ok(Stats {
-        books: one("SELECT count(*) FROM books")?,
+        // 「已导出书籍」按实际导出记录计（清除书库记录后同步归零），而非导入书数
+        books: one("SELECT count(DISTINCT book_id) FROM exported_files")?,
         tasks_total: one("SELECT count(*) FROM export_tasks")?,
         tasks_completed: one("SELECT count(*) FROM export_tasks WHERE status='completed'")?,
         tasks_running: one(
