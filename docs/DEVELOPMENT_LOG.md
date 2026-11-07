@@ -1,5 +1,13 @@
 # DEVELOPMENT LOG
 
+## 2026-11-07 · v0.1.1：真实首用缺陷修复与发版
+
+- **来源**：用户首次实际使用发现 —— 点「登录微信读书」弹出的浏览器是空白 about:blank，无二维码可扫。
+- **根因**：独立登录流程（worker login op）只创建浏览器上下文等待 Cookie，**从未导航到微信读书登录页**（CLI 流程由抓取入口顺带完成导航，独立化时遗漏）。
+- **修复**：login op 打开浏览器后先 goto `weread.qq.com/#login`（headless 探测确认渲染「使用微信扫一扫登录」二维码 iframe），再进入 300 秒扫码轮询；端到端验证 auth.required 在 3 秒内（导航完成后）发出。
+- **发版**：v0.1.1 三平台（本地 arm64/Intel 交叉构建 + CI arm64/Windows），Release 资产为正本、SHA256SUMS 按发布页点号名生成并实测 `shasum -c` 3×OK；release.yml 补 Release 不存在时自动创建。
+- **教训**：①独立化的用户流程必须完整复刻原流程的每一步（含导航）；②网络抖动下的下载会留半截文件 —— 分发产物必须按 API 大小逐字节校验后再入 dist；③本地构建与 CI 构建字节不同（内嵌时间戳），发布校验和必须以 Release 资产为正本。
+
 ## 2026-11-07 · 前端测试层补齐 + GitHub Release
 
 - **模块**：apps/desktop（vitest.config.ts、bookId/api/stores 三组测试）、CONTRIBUTING.md（新增）、.github/workflows/release.yml（Release 自动挂载）、README/docs
