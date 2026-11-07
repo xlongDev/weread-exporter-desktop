@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { Check } from "lucide-react";
 import { api, toAppError } from "../../services/api";
 import { useNav } from "../../stores/nav";
@@ -75,8 +76,8 @@ export function Export() {
     };
   }, [opId]);
 
-  async function parse() {
-    const bookId = extractBookId(raw);
+  async function parseWithId(input: string) {
+    const bookId = extractBookId(input);
     if (!looksLikeBookId(bookId)) {
       setPhase("error");
       setError("请粘贴微信读书书籍链接（weread.qq.com/web/reader/…）或书籍 ID");
@@ -93,6 +94,21 @@ export function Export() {
     } catch (e) {
       setPhase("error");
       setError(toAppError(e).userMessage);
+    }
+  }
+
+  async function parse() {
+    await parseWithId(raw);
+  }
+
+  async function pasteAndFetch() {
+    try {
+      const text = (await readText()).trim();
+      setRaw(text);
+      await parseWithId(text);
+    } catch (e) {
+      setPhase("error");
+      setError("无法读取剪贴板：" + toAppError(e).userMessage);
     }
   }
 
@@ -158,6 +174,9 @@ export function Export() {
             className="h-9 flex-1 rounded-[6px] border border-line bg-surface px-3 text-sm text-ink outline-none placeholder:text-faint focus:border-[var(--data)]"
             aria-label="微信读书书籍链接或 ID"
           />
+          <Button variant="secondary" disabled={phase === "parsing"} onClick={() => void pasteAndFetch()}>
+            粘贴并获取
+          </Button>
           <Button variant="primary" disabled={phase === "parsing" || !raw.trim()} onClick={() => void parse()}>
             {phase === "parsing" ? "获取中…" : "获取书籍"}
           </Button>
