@@ -247,8 +247,6 @@ class Worker:
 
     # ---- 书籍元数据（含封面下载与可访问性校验）----
     async def book_info(self, task_id, params):
-        import urllib.request
-
         import crawl_weread
         from playwright.async_api import async_playwright
 
@@ -268,56 +266,33 @@ class Worker:
                 ctx = await crawl_weread.launch_browser_context(p, crawl_weread.USER_DATA_DIR, headless=True)
                 try:
                     logged_in = await crawl_weread.check_cookies_login(ctx)
-                    page = await ctx.new_page()
-                    target_url = f"https://weread.qq.com/web/reader/{book_id}"
-                    self.log(f"获取书籍信息: {target_url}")
-                    await page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
-                    await asyncio.sleep(3)
-                    meta = await page.evaluate("""() => {
-                        let info = (window.__INITIAL_STATE__ && window.__INITIAL_STATE__.reader && window.__INITIAL_STATE__.reader.bookInfo) || {};
-                        return {
-                            title: info.title || document.title.replace(' - 微信读书', '').trim(),
-                            author: info.author || '',
-                            cover: info.cover || '',
-                            intro: info.intro || '',
-                            publisher: info.publisher || ''
-                        };
-                    }""")
-                    cover_path = ""
-                    cover_url = meta.get("cover")
-                    if cover_url:
-                        try:
-                            os.makedirs(cover_dir, exist_ok=True)
-                            cover_path = os.path.join(cover_dir, f"{book_id}.jpg")
-                            req = urllib.request.Request(cover_url, headers={"Referer": "https://weread.qq.com/", "User-Agent": "Mozilla/5.0"})
-                            raw = urllib.request.urlopen(req, timeout=15).read()
-                            if len(raw) > 500:
-                                with open(cover_path, "wb") as f:
-                                    f.write(raw)
-                            else:
-                                cover_path = ""
-                        except Exception as e:
-                            self.log(f"封面下载失败: {e}")
-                            cover_path = ""
-
-                    title = (meta.get("title") or "").strip()
-                    ok = bool(title) and "微信读书" not in title[:6]
-                    self.emit("book.metadata", {
-                        "book_id": book_id,
-                        "title": title,
-                        "author": meta.get("author", ""),
-                        "intro": meta.get("intro", ""),
-                        "cover_path": cover_path,
-                        "logged_in": logged_in,
-                    }, task_id)
-                    self.emit("book.validation", {
-                        "ok": ok,
-                        "reason": "" if ok else "not_found",
-                        "user_message": "" if ok else "未找到该书籍，请确认链接是否正确、书籍是否存在",
-                        "logged_in": logged_in,
-                    }, task_id)
                 finally:
                     await ctx.close()
+            try:
+                # og: meta 按 URL 服务端渲染，防 bookInfo 状态串书；浏览器仅用于登录态检查
+                meta = await asyncio.to_thread(crawl_weread.fetch_book_meta_http, book_id)
+            except Exception as e:
+                self.log("book_meta exception: " + repr(e))
+                meta = {}
+            os.makedirs(cover_dir, exist_ok=True)
+            cover_path = crawl_weread.download_cover(cover_dir, meta.get("cover", ""), filename=f"{book_id}.jpg", force=True)
+
+            title = (meta.get("title") or "").strip()
+            ok = bool(title) and "微信读书" not in title[:6]
+            self.emit("book.metadata", {
+                "book_id": book_id,
+                "title": title,
+                "author": meta.get("author", ""),
+                "intro": meta.get("intro", ""),
+                "cover_path": cover_path,
+                "logged_in": logged_in,
+            }, task_id)
+            self.emit("book.validation", {
+                "ok": ok,
+                "reason": "" if ok else "not_found",
+                "user_message": "" if ok else "未找到该书籍，请确认链接是否正确、书籍是否存在",
+                "logged_in": logged_in,
+            }, task_id)
         except Exception as e:
             self.log("book_info exception: " + repr(e))
             self.emit("book.validation", {"ok": False, "reason": "error", "user_message": f"获取书籍信息失败：{e}"}, task_id)

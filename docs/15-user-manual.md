@@ -9,7 +9,7 @@
 | 格式 | 适合 | 说明 |
 | --- | --- | --- |
 | 精排 PDF | iPad 批注、打印 | 含封面、可点击目录、PDF 书签大纲与页码 |
-| EPUB | Apple Books / Kindle | 双字体排版，内嵌目录与原书插图 |
+| EPUB | Apple Books / Kindle | 双字体排版，含封面页、目录与原书插图（书架内显示封面缩略图） |
 | Markdown | Obsidian / Notion | 生成「纯笔记版」与「HTML 排版版」两个文件 |
 
 ### 系统要求

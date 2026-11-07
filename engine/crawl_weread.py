@@ -198,6 +198,95 @@ def download_all_images(raw_dir, img_dir):
         print(f"🖼️ 章节配图就绪: {ok_img}/{len(tasks)}", flush=True)
 
 
+def download_cover(book_dir, cover_url, filename="cover.jpg", force=False):
+    """下载书籍封面到 book_dir/filename（幂等：已有且非 force 则跳过）。
+    小图（s_/t6_ 前缀，约70x100~300px）优先换 t7 高清变体，失败回退原链接。成功返回路径，否则返回 ''。"""
+    cover_path = os.path.join(book_dir, filename)
+    if not force and os.path.isfile(cover_path) and os.path.getsize(cover_path) > 500:
+        return cover_path
+    if not cover_url:
+        return ""
+    t7 = re.sub(r"/(?:s|t6)_", "/t7_", str(cover_url), count=1)
+    for url in dict.fromkeys([t7, str(cover_url)]):
+        try:
+            req = urllib.request.Request(url, headers={"Referer": "https://weread.qq.com/", "User-Agent": "Mozilla/5.0"})
+            raw = urllib.request.urlopen(req, timeout=15).read()
+            if len(raw) > 500:
+                with open(cover_path, "wb") as f:
+                    f.write(raw)
+                print(f"🖼️ 封面下载完成: {os.path.getsize(cover_path)} bytes", flush=True)
+                return cover_path
+        except Exception:
+            continue
+    print("⚠️ 封面下载跳过", flush=True)
+    return ""
+
+
+def parse_book_detail_html(html):
+    """解析 bookDetail 页 HTML 中的书籍元数据。
+    og: meta 按 URL 服务端渲染、永远对应当前书籍；sState.reader.bookInfo 的封面/简介在微信读书
+    服务端就会串书（实测多本书封面指向别的书），因此仅 author/publisher/cover 兜底取自 bookInfo。"""
+    import html as html_mod
+
+    def og(prop):
+        m = re.search(r'<meta[^>]+property="%s"[^>]+content="([^"]*)"' % prop, html) or \
+            re.search(r'<meta[^>]+content="([^"]*)"[^>]+property="%s"' % prop, html)
+        return html_mod.unescape(m.group(1)).strip() if m else ""
+
+    def state_field(key):
+        m = re.search(r'"bookInfo":\{[^{}]*?"%s":"([^"]*)"' % key, html)
+        return html_mod.unescape(m.group(1)).strip() if m else ""
+
+    return {
+        "title": og("og:title"),
+        "author": state_field("author"),
+        "cover": og("og:image") or state_field("cover"),
+        "intro": og("og:description"),
+        "publisher": state_field("publisher"),
+    }
+
+
+def fetch_book_meta_http(book_id, timeout=20):
+    """从 bookDetail 页面（公开、按 URL 服务端渲染、无需登录）拉取书籍元数据；失败返回 {}。"""
+    url = f"https://weread.qq.com/web/bookDetail/{book_id}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        html = urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8", "replace")
+    except Exception as e:
+        print(f"⚠️ 在线元数据获取失败: {e}", flush=True)
+        return {}
+    return parse_book_detail_html(html)
+
+
+def refresh_meta_and_cover(book_id, book_dir):
+    """用 og: 元数据刷新 book_dir/meta.json 并强制重下封面（旧数据可能串书）。
+    HTTP 失败时沿用旧 meta.json 与封面文件。返回合并后的 meta dict。"""
+    meta = fetch_book_meta_http(book_id)
+    meta_file = os.path.join(book_dir, "meta.json")
+    old = {}
+    if os.path.isfile(meta_file):
+        try:
+            with open(meta_file, encoding="utf-8") as f:
+                old = json.load(f)
+        except Exception:
+            old = {}
+    if meta.get("title"):
+        for k, v in old.items():
+            if v and not meta.get(k):
+                meta[k] = v
+        meta["book_id"] = book_id
+        with open(meta_file, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+        download_cover(book_dir, meta.get("cover"), force=True)
+    else:
+        meta = old
+    meta.setdefault("book_id", book_id)
+    meta.setdefault("title", f"Book_{book_id}")
+    for k in ("author", "cover", "intro", "publisher"):
+        meta.setdefault(k, "")
+    return meta
+
+
 def extract_book_id(raw_input):
     """从纯 ID、完整网页链接或带参数的分享链接中智能提取书籍 ID"""
     if not raw_input:
@@ -562,6 +651,8 @@ async def main(book_id_or_url, force=False, progress=None, should_cancel=None, o
         print("⏩ 自动跳过重复抓取，直接复用已有数据进入后续多格式导出流程。")
         print("💡 如需强制重新完整抓取，可在命令行传入 --force 参数。\n")
         download_all_images(raw_dir, img_dir)
+        # 复用旧数据也要刷新元数据与封面（旧版本抓取的 bookInfo 数据会串书）
+        refresh_meta_and_cover(book_id, book_dir)
         return True
 
     print(f"📖 目标书籍 ID: {book_id}")
@@ -603,21 +694,8 @@ async def main(book_id_or_url, force=False, progress=None, should_cancel=None, o
             await page.click("button.readerControls_item.isNormalReader")
             await asyncio.sleep(3)
 
-        # 抓取完整的书籍元数据与原版高清封面
-        book_meta = await page.evaluate("""() => {
-            let info = (window.__INITIAL_STATE__ && window.__INITIAL_STATE__.reader && window.__INITIAL_STATE__.reader.bookInfo) || {};
-            return {
-                title: info.title || document.title.replace(' - 微信读书', '').trim(),
-                author: info.author || '',
-                cover: info.cover || '',
-                intro: info.intro || '',
-                publisher: info.publisher || ''
-            };
-        }""")
-        book_meta["book_id"] = book_id
-        meta_file = os.path.join(book_dir, "meta.json")
-        with open(meta_file, "w", encoding="utf-8") as f:
-            json.dump(book_meta, f, ensure_ascii=False, indent=2)
+        # 抓取完整的书籍元数据与原版高清封面（og: meta 为准，防 bookInfo 状态串书）
+        book_meta = refresh_meta_and_cover(book_id, book_dir)
 
         _emit({"kind": "stage", "stage": "metadata", "title": book_meta.get("title", ""), "author": book_meta.get("author", "")})
 
@@ -625,18 +703,7 @@ async def main(book_id_or_url, force=False, progress=None, should_cancel=None, o
         if book_meta.get("author"):
             print(f"✍️ 作者: {book_meta.get('author')}")
 
-        cover_url = book_meta.get("cover")
-        if cover_url:
-            cover_path = os.path.join(book_dir, "cover.jpg")
-            try:
-                req = urllib.request.Request(cover_url, headers={"Referer": "https://weread.qq.com/", "User-Agent": "Mozilla/5.0"})
-                raw = urllib.request.urlopen(req, timeout=15).read()
-                if len(raw) > 500:
-                    with open(cover_path, "wb") as f:
-                        f.write(raw)
-                    print("🖼️ 原版高清封面下载完成")
-            except Exception as e:
-                print(f"⚠️ 封面下载跳过: {e}")
+        download_cover(book_dir, book_meta.get("cover"), force=True)
 
         # 读取完整目录列表
         await page.click("button.readerControls_item.catalog", timeout=8000)
