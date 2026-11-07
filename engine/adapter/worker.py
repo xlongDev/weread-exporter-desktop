@@ -225,6 +225,9 @@ class Worker:
                     if await crawl_weread.check_cookies_login(ctx):
                         self.emit("auth.status", {"logged_in": True}, task_id)
                         return
+                    page = await ctx.new_page()
+                    # 必须实际打开微信读书登录页，用户才有二维码可扫（独立登录流程此前漏了导航）
+                    await page.goto("https://weread.qq.com/#login", wait_until="domcontentloaded", timeout=60000)
                     self.emit("auth.required", {"wait_seconds": 300}, task_id)
                     self.log("等待微信扫码登录（最长 300 秒）...")
                     for _ in range(150):
