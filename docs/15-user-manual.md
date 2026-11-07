@@ -51,6 +51,24 @@
 
 ### 常见问题
 
+**Q：macOS 首次打开提示「已损坏，无法打开」？**
+
+这是 macOS 对未签名应用的 Gatekeeper 拦截（浏览器下载的 DMG 带隔离标记），两种解决办法：
+
+**方式一（推荐）一键安装脚本** —— 终端执行，命令行下载安装，**完全不会出现「已损坏」提示**：
+
+    curl -fsSL https://raw.githubusercontent.com/xlongDev/weread-exporter-desktop/main/scripts/install-macos.sh | bash
+
+（下载慢可加加速代理：`WEREAD_MIRROR_PREFIX=https://<GitHub加速代理> curl -fsSL … | bash`）
+
+**方式二 手动清除隔离标记** —— 先把应用拖入「应用程序」，终端执行：
+
+    xattr -dr com.apple.quarantine "/Applications/WeRead Exporter.app"
+
+（若提示权限不足，命令前加 `sudo `。）
+
+注：新版 macOS 已取消「右键 → 打开」的绕过方式，请用上述两种方法。
+
 **Q：点登录没有反应 / 提示浏览器启动失败？**
 应用会优先使用系统已装的 Edge 或 Chrome。如果两者都没有，可在终端执行一次（macOS）：
 
