@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, FolderOpen, LayoutGrid, List, Trash2 } from "lucide-react";
+import { BookOpen, FolderOpen, LayoutGrid, List } from "lucide-react";
 import { api, toAppError } from "../../services/api";
 import type { LibraryFile } from "../../types";
 import { Button } from "../../components/Button";
 import { BookCover } from "../../components/BookCover";
 import { Dialog } from "../../components/Dialog";
+import { Trash2 } from "lucide-react";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusPill } from "../../components/StatusPill";
 
@@ -18,6 +19,7 @@ export function Library() {
   const [formatFilter, setFormatFilter] = useState<string>("all");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [pendingDelete, setPendingDelete] = useState<LibraryFile | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   async function load() {
     try {
@@ -71,6 +73,17 @@ export function Library() {
     }
   }
 
+  async function clearRecords() {
+    try {
+      await api.clearLibraryRecords();
+      setConfirmClear(false);
+      setError(null);
+      await load();
+    } catch (e) {
+      setError(toAppError(e).userMessage);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -118,7 +131,16 @@ export function Library() {
             {fmt === "all" ? "全部" : FORMAT_LABEL[fmt]}
           </button>
         ))}
-        <span className="tnum ml-auto text-xs text-faint">{filtered.length} 个文件</span>
+        <Button
+          variant="ghost"
+          className="ml-auto"
+          disabled={files.length === 0}
+          onClick={() => setConfirmClear(true)}
+        >
+          <Trash2 size={14} strokeWidth={1.5} aria-hidden="true" />
+          清除记录
+        </Button>
+        <span className="tnum text-xs text-faint">{filtered.length} 个文件</span>
       </div>
 
       {error && <p className="text-sm text-negative-text">{error}</p>}
@@ -187,6 +209,26 @@ export function Library() {
             </li>
           ))}
         </ul>
+      )}
+
+      {confirmClear && (
+        <Dialog
+          title="清除全部书库记录？"
+          onClose={() => setConfirmClear(false)}
+          actions={
+            <>
+              <Button variant="ghost" onClick={() => setConfirmClear(false)}>
+                取消
+              </Button>
+              <Button onClick={() => void clearRecords()}>清除全部记录</Button>
+            </>
+          }
+        >
+          <p className="tnum">将删除全部 {files.length} 条书库记录。</p>
+          <p className="text-xs">
+            只删除记录，磁盘上的导出文件不受影响；如需连文件一起删除，请逐条使用卡片上的删除按钮。
+          </p>
+        </Dialog>
       )}
 
       {pendingDelete && (

@@ -1020,6 +1020,48 @@ mod tests {
     }
 
     #[test]
+    fn clear_finished_tasks_scope() {
+        let conn = crate::engine::manager::test_conn();
+        conn.execute("INSERT INTO books(book_id, title) VALUES ('bk99999999', 'X')", []).unwrap();
+        for (bid, st) in [("bk1done", "completed"), ("bk2cancel", "cancelled"), ("bk3wait", "waiting"), ("bk4run", "running")] {
+            conn.execute(
+                &format!("INSERT INTO books(book_id, title) VALUES ('{bid}', 'T')"),
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                &format!(
+                    "INSERT INTO export_tasks(book_id, format, output_dir, status) VALUES ('{bid}', 'markdown', '/tmp', '{st}')"
+                ),
+                [],
+            )
+            .unwrap();
+        }
+        // 已完成任务的产物记录：任务删除后应保留（ON DELETE SET NULL）
+        conn.execute(
+            "INSERT INTO exported_files(book_id, task_id, format, file_path, file_name, file_size)
+             VALUES ('bk1done', (SELECT id FROM export_tasks WHERE book_id='bk1done'), 'markdown', '/tmp/a.md', 'a.md', 10)",
+            [],
+        )
+        .unwrap();
+
+        let n = crate::commands::clear_finished_tasks_conn(&conn).unwrap();
+        assert_eq!(n, 2, "只清除 completed/cancelled");
+        let statuses: Vec<String> = {
+            let mut stmt = conn.prepare("SELECT status FROM export_tasks ORDER BY id").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap().map_while(Result::ok).collect()
+        };
+        assert_eq!(statuses, vec!["waiting", "running"], "进行中/等待中的任务必须保留");
+        let files: i64 = conn
+            .query_row("SELECT count(*) FROM exported_files", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(files, 1, "书库记录不随任务删除");
+
+        let n2 = crate::commands::clear_library_records_conn(&conn).unwrap();
+        assert_eq!(n2, 1);
+    }
+
+    #[test]
     fn spawn_failure_marks_task_failed() {
         // 引擎进程启动失败 → 任务必须显式 failed（ENGINE_SPAWN_FAILED），而非永久等待
         let conn = test_conn();

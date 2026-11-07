@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api, toAppError } from "../../services/api";
 import { useNav } from "../../stores/nav";
 import { useAuth } from "../../stores/auth";
-import type { Stats } from "../../types";
+import type { LibraryFile, Stats } from "../../types";
 import { Button } from "../../components/Button";
+import { BookCover } from "../../components/BookCover";
 import { EmptyState } from "../../components/EmptyState";
 import { KpiStrip } from "../../components/KpiStrip";
 import { SectionHeader } from "../../components/SectionHeader";
@@ -12,12 +13,15 @@ import { StatusPill } from "../../components/StatusPill";
 /** 总览：现在能不能导？正在跑什么？上次导了什么？（docs/04 §4.1） */
 export function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [recent, setRecent] = useState<LibraryFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const goto = useNav((s) => s.goto);
 
   const load = useCallback(async () => {
     try {
-      setStats(await api.stats());
+      const [st, files] = await Promise.all([api.stats(), api.listFiles()]);
+      setStats(st);
+      setRecent(files.slice(0, 4));
       setError(null);
     } catch (e) {
       setError(toAppError(e).userMessage);
@@ -73,16 +77,47 @@ export function Dashboard() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <SectionHeader title="最近导出" />
-        <EmptyState
-          withSpines
-          title="还没有导出记录"
-          description="完成第一次导出后，最近的书籍会显示在这里。"
+        <SectionHeader
+          title="最近导出"
+          action={
+            recent.length > 0 ? (
+              <Button variant="ghost" onClick={() => goto("library")}>
+                前往书库
+              </Button>
+            ) : undefined
+          }
         />
+        {recent.length === 0 ? (
+          <EmptyState
+            withSpines
+            title="还没有导出记录"
+            description="完成第一次导出后，最近的书籍会显示在这里。"
+          />
+        ) : (
+          <ul className="flex flex-col">
+            {recent.map((f) => (
+              <li key={f.id} className="flex items-center gap-3 border-b border-rule py-2.5 last:border-b-0">
+                <BookCover path={f.cover_path} title={f.title || f.book_id} width={36} />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm">{f.title || f.book_id}</span>
+                  <span className="tnum text-xs text-faint">
+                    {f.format.toUpperCase()} · {formatDate(f.created_at)}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       </div>
     </div>
   );
+}
+
+function formatDate(iso: string): string {
+  const d = Date.parse(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
+  if (Number.isNaN(d)) return iso;
+  return new Date(d).toLocaleDateString("zh-CN");
 }
 
 /** 登录卡：真实会话状态 + 扫码登录流程（docs/05 F1/F2） */
@@ -100,7 +135,7 @@ function AccountCard() {
     );
 
   const hint = auth.waiting
-    ? "已在弹出浏览器中打开微信读书，请使用微信扫码（300 秒内完成）。"
+    ? "已在弹出浏览器中打开微信读书登录页，请使用微信扫码（300 秒内完成）。"
     : auth.status === "in"
       ? "会话有效，可以开始导入并导出书籍。"
       : auth.status === "checking"
