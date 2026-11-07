@@ -1,9 +1,8 @@
 name: Release 构建
 
+# 发版必须经人工确认后手动触发（gh workflow run "Release 构建"），tag 推送不再自动发版
 on:
-  workflow_dispatch: {}          # 手动触发
-  push:
-    tags: ["v*"]                 # 推送 v* tag 自动构建
+  workflow_dispatch: {}
 
 permissions:
   contents: write
