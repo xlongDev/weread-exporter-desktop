@@ -18,6 +18,18 @@
 - 本机装有 Google Chrome 或 Microsoft Edge（用于微信扫码登录与书籍渲染；没有也可以，见下方"常见问题"）
 - 无需安装 Python 或任何开发工具 —— 一切已内置
 
+### 下载安装
+
+从 [Releases 页](https://github.com/xlongDev/weread-exporter-desktop/releases) 下载对应平台的安装包；或用一键安装脚本（下载 + 校验和 + 安装一步完成）：
+
+    # macOS（推荐：命令行下载无隔离标记，不会出现「已损坏」提示）
+    curl -fsSL https://raw.githubusercontent.com/xlongDev/weread-exporter-desktop/main/scripts/install-macos.sh | bash
+
+    # Windows（PowerShell）
+    irm https://raw.githubusercontent.com/xlongDev/weread-exporter-desktop/main/scripts/install-windows.ps1 | iex
+
+应用内置「检查更新」：设置 → 关于 → 检查更新，会对比 GitHub 最新版本并给出上述安装命令。
+
 ### 第一次使用
 
 1. 打开应用，首页会显示"微信读书账号：未登录"。
@@ -46,8 +58,14 @@
 
 - **主题**：浅色 / 深色 / 跟随系统。
 - **默认导出目录**：每次导出的默认保存位置。
+- **检查更新**：对比 GitHub 最新版本；有新版时提供发布页链接和一键安装命令。
+- **复制诊断信息**：问题反馈时附上（含版本、近期失败任务与脱敏日志），可加快定位。
 - **退出登录**：清除本机保存的微信读书登录态。
 - 数据（任务记录、设置）全部保存在本机，不会上传到任何服务器。
+
+### 登录失效怎么办
+
+导出过程中如果微信读书登录态过期，任务会明确提示「登录已失效」并停在断点处（不会误标为完成）。重新扫码登录后，在任务详情点「继续导出」，会从断点接着抓，已抓内容不丢。
 
 ### 常见问题
 

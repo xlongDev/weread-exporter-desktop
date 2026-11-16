@@ -28,7 +28,19 @@
 
 仓库：https://github.com/xlongDev/weread-exporter-desktop （Actions → Release 构建 可随时重产三平台包；Intel 包用本地交叉构建命令）。
 
-macOS 未签名版本首次打开：右键点击应用 → 打开。
+**一键安装**（下载 + 校验 + 安装一步完成）：
+
+```bash
+# macOS（curl 链路无隔离标记，不会出现「已损坏」提示）
+curl -fsSL https://raw.githubusercontent.com/xlongDev/weread-exporter-desktop/main/scripts/install-macos.sh | bash
+```
+
+```powershell
+# Windows（PowerShell）
+irm https://raw.githubusercontent.com/xlongDev/weread-exporter-desktop/main/scripts/install-windows.ps1 | iex
+```
+
+macOS 未签名应用在新版系统已无「右键 → 打开」绕过方式；推荐用上面脚本安装，或见 docs/15 FAQ 手动清除隔离标记。
 
 ## 🚀 从源码构建
 
