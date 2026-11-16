@@ -652,7 +652,7 @@ fn insert_outputs(conn: &Connection, task_id: i64, ev: &EngineEvent, outputs: &[
 /// 供测试使用：内存库 + 迁移
 #[cfg(test)]
 pub fn test_conn() -> Connection {
-    let mut conn = Connection::open_in_memory().unwrap();
+    let conn = Connection::open_in_memory().unwrap();
     for (version, sql) in crate::db::MIGRATIONS {
         conn.execute_batch(sql).unwrap();
         conn.pragma_update(None, "user_version", *version).unwrap();
@@ -807,7 +807,6 @@ mod tests {
                 .query_row("SELECT status FROM export_tasks WHERE id=?1", [task_id], |r| r.get(0))
                 .unwrap();
             drop(conn);
-            drop(state);
             if status == "completed" || status == "failed" || status == "cancelled" {
                 break;
             }
@@ -864,9 +863,7 @@ mod tests {
         for entry in std::fs::read_dir(src.join("chapters")).unwrap().flatten() {
             let _ = std::fs::copy(entry.path(), dst.join("chapters").join(entry.file_name()));
         }
-        for f in ["meta.json"] {
-            let _ = std::fs::copy(src.join(f), dst.join(f));
-        }
+        let _ = std::fs::copy(src.join("meta.json"), dst.join("meta.json"));
 
         let db_path = dir.join("t.db");
         let mut conn = db::open(&db_path).unwrap();
@@ -913,7 +910,6 @@ mod tests {
                 .query_row("SELECT status FROM export_tasks WHERE id=?1", [task_id], |r| r.get(0))
                 .unwrap();
             drop(conn);
-            drop(state);
             if status == "completed" || status == "failed" {
                 break;
             }
@@ -1003,7 +999,6 @@ mod tests {
                 let rows = stmt.query_map([], |r| r.get(0)).unwrap();
                 rows.map_while(Result::ok).collect()
             };
-            drop(state);
             if statuses.iter().all(|s| s != "running" && s != "waiting")
                 || std::time::Instant::now() > deadline
             {
