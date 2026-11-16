@@ -1,4 +1,4 @@
-# WeRead Exporter Windows 一键安装
+﻿# WeRead Exporter Windows 一键安装
 #
 # 用途：从 GitHub Release 下载官方 NSIS 安装包、校验后运行安装。
 # 说明：Windows 没有 macOS 的 quarantine 隔离问题，脚本的价值是
