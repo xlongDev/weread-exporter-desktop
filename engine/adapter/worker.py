@@ -141,6 +141,10 @@ class Worker:
                     should_cancel=self.cancel_event.is_set,
                     output_dir=output_dir,
                 )
+            except crawl_weread.LoginExpiredError as e:
+                self.log("login expired mid-crawl: " + str(e))
+                self.emit("task.failed", {"code": "LOGIN_EXPIRED", "message": str(e), "user_message": "登录已失效：请重新扫码登录（导出页可登录），然后对本任务点「继续导出」即可从断点续抓", "recoverable": True}, task_id)
+                return
             except Exception as e:
                 self.log("crawl exception: " + repr(e))
                 self.emit("task.failed", {"code": "CRAWL_ERROR", "message": repr(e), "user_message": "抓取过程出现异常（详见任务日志），可重试或继续导出已抓取部分", "recoverable": True}, task_id)

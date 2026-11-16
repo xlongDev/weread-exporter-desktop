@@ -561,6 +561,10 @@ async def wait_stable_chars(page, timeout=6.0):
     return last_n
 
 
+class LoginExpiredError(RuntimeError):
+    """抓取过程中登录态失效（连续空页且凭证丢失）——区别于网络异常与全书读完"""
+
+
 async def check_cookies_login(ctx):
     """基于真实鉴权凭证检查登录态，彻底避免访客目录误判"""
     try:
@@ -947,6 +951,20 @@ async def main(book_id_or_url, force=False, progress=None, should_cancel=None, o
                 if seen_last and stale >= 2:
                     print("  🏁 已到达末章且无新内容，抓取完成", flush=True)
                     break
+                # 连续空页需区分「全书读完」与「登录失效」：凭证丢失若不拦截，8 页后会被误标 completed 并静默产出残缺书
+                if stale >= 2 and not seen_last:
+                    await asyncio.sleep(2)
+                    if not await check_cookies_login(ctx):
+                        save_crawl_state(book_dir, {
+                            "book_id": book_id,
+                            "completed": False,
+                            "last_step": step,
+                            "saved_chapter_count": saved_idx,
+                            "last_title": cur_title,
+                            "seen_titles": list(seen_titles),
+                            "total_words": total_words_accum,
+                        })
+                        raise LoginExpiredError("登录态在抓取过程中失效")
                 if stale >= 8:
                     print(f"  🏁 连续 {stale} 页无新内容，判定全书抓取结束", flush=True)
                     break
