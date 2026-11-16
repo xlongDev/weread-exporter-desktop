@@ -65,7 +65,8 @@ pub fn run() {
             commands::start_op,
             commands::cancel_op,
             commands::logout,
-            commands::import_book
+            commands::import_book,
+            commands::diagnostics_text
         ]);
 
     handle_builder

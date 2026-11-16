@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { api, toAppError } from "../../services/api";
 import { useSettings } from "../../stores/settings";
 import { useEngine } from "../../stores/engine";
@@ -11,6 +12,14 @@ import type { PathsInfo } from "../../types";
 import { Button } from "../../components/Button";
 import { Select } from "../../components/Select";
 import { StatusPill } from "../../components/StatusPill";
+import { compareVersions, fetchLatestRelease, installCommand } from "../../utils/update";
+
+type UpdateStatus =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "latest" }
+  | { status: "available"; tag: string; url: string }
+  | { status: "error" };
 
 /** 设置：每区块 = 左侧标签列 + 右侧面板（docs/09 §5 / app-screens §8.2） */
 export function Settings() {
@@ -21,6 +30,7 @@ export function Settings() {
   const [appVersion, setAppVersion] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateStatus>({ status: "idle" });
 
   useEffect(() => {
     void load();
@@ -34,9 +44,8 @@ export function Settings() {
   async function write(key: string, value: unknown, label: string) {
     try {
       await set(key, value);
-      setSaved(label);
+      flashSaved(label);
       setActionError(null);
-      window.setTimeout(() => setSaved((s) => (s === label ? null : s)), 1500);
     } catch (e) {
       setActionError(toAppError(e).userMessage);
     }
@@ -61,6 +70,45 @@ export function Settings() {
     } catch (e) {
       setActionError(toAppError(e).userMessage);
     }
+  }
+
+  async function checkUpdate() {
+    setUpdate({ status: "checking" });
+    const release = await fetchLatestRelease();
+    if (!release) {
+      setUpdate({ status: "error" });
+      return;
+    }
+    setUpdate(
+      compareVersions(release.tag, appVersion) > 0
+        ? { status: "available", tag: release.tag, url: release.url }
+        : { status: "latest" },
+    );
+  }
+
+  async function copyInstallCommand() {
+    try {
+      await writeText(installCommand(navigator.userAgent));
+      flashSaved("install_cmd");
+    } catch (e) {
+      setActionError(toAppError(e).userMessage);
+    }
+  }
+
+  async function copyDiagnostics() {
+    try {
+      const text = await api.diagnostics();
+      await writeText(text);
+      flashSaved("diagnostics");
+      setActionError(null);
+    } catch (e) {
+      setActionError(toAppError(e).userMessage);
+    }
+  }
+
+  function flashSaved(label: string) {
+    setSaved(label);
+    window.setTimeout(() => setSaved((s) => (s === label ? null : s)), 1500);
   }
 
   const themeMode = (settings?.["general.theme"] as ThemeMode) ?? "system";
@@ -146,6 +194,39 @@ export function Settings() {
       <SettingSection title="关于" description="版本与开源信息。">
         <FieldRow label="应用版本">
           <span className="tnum text-sm text-muted">{appVersion || "—"}</span>
+        </FieldRow>
+        <FieldRow label="检查更新">
+          <span className="min-w-0 flex-1 text-sm text-muted">
+            {update.status === "idle" && "从 GitHub Releases 检查新版本"}
+            {update.status === "checking" && "检查中…"}
+            {update.status === "latest" && `已是最新（${appVersion}）`}
+            {update.status === "available" && `发现新版本 ${update.tag}（当前 ${appVersion}）`}
+            {update.status === "error" && "检查失败（需要能访问 GitHub），请稍后重试"}
+          </span>
+          {update.status === "idle" && (
+            <Button onClick={() => void checkUpdate()}>检查更新</Button>
+          )}
+          {update.status === "checking" && (
+            <Button disabled>检查中…</Button>
+          )}
+          {update.status === "error" && (
+            <Button onClick={() => void checkUpdate()}>重试</Button>
+          )}
+          {update.status === "available" && (
+            <>
+              <Button onClick={() => void openUrl(update.url).catch(() => {})}>打开发布页</Button>
+              <Button variant="ghost" onClick={() => void copyInstallCommand()}>
+                复制安装命令
+              </Button>
+            </>
+          )}
+        </FieldRow>
+        <FieldRow label="诊断信息">
+          <span className="min-w-0 flex-1 text-sm text-muted">
+            复制版本、近期失败任务与应用日志（已脱敏），问题反馈时附上可加快定位。
+          </span>
+          <Button onClick={() => void copyDiagnostics()}>复制诊断信息</Button>
+          {saved === "diagnostics" && <SavedStamp />}
         </FieldRow>
         <FieldRow label="导出引擎">
           <span className="tnum text-sm text-muted">

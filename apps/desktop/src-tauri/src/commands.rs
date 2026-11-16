@@ -697,3 +697,96 @@ pub fn import_book(
     log::write("INFO", &format!("book imported: {book_id}"));
     Ok(())
 }
+
+/// 组装诊断文本（纯函数，便于测试）：版本/平台 + 近期失败任务 + 日志尾部。
+pub fn format_diagnostics(version: &str, os: &str, arch: &str, failed_tasks: &[String], log_tail: &str) -> String {
+    let mut out = format!("WeRead Exporter 诊断信息\n版本: {version}\n系统: {os} ({arch})\n");
+    out.push_str("\n== 近期失败任务（最多 5 条）==\n");
+    if failed_tasks.is_empty() {
+        out.push_str("（无）\n");
+    }
+    for t in failed_tasks {
+        out.push_str(t);
+        out.push('\n');
+    }
+    out.push_str("\n== 应用日志尾部 ==\n");
+    out.push_str(log_tail);
+    out
+}
+
+/// 读应用日志尾部（log.rs 已脱敏凭证，单文件上限 5MB，整读可接受）。
+fn read_log_tail(path: &std::path::Path, max_lines: usize) -> String {
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let lines: Vec<&str> = content.lines().collect();
+            let start = lines.len().saturating_sub(max_lines);
+            lines[start..].join("\n")
+        }
+        Err(_) => String::new(),
+    }
+}
+
+/// 诊断信息（设置页一键复制）：问题反馈时附带，免多轮追问。
+#[tauri::command]
+pub fn diagnostics_text(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+    let version = app.package_info().version.to_string();
+    let mut failed_tasks = Vec::new();
+    {
+        let conn = state.db.lock().map_err(lock_err)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, format, COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(created_at,'')
+                 FROM export_tasks WHERE status='failed' ORDER BY id DESC LIMIT 5",
+            )
+            .map_err(|e| format!("查询失败任务失败: {e}"))?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(format!(
+                    "#{} {} {} {} {}",
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                ))
+            })
+            .map_err(|e| format!("查询失败任务失败: {e}"))?;
+        for row in rows {
+            failed_tasks.push(row.map_err(|e| format!("读取失败任务失败: {e}"))?);
+        }
+    }
+    let log_tail = read_log_tail(&state.paths.logs.join("app.log"), 100);
+    Ok(format_diagnostics(
+        &version,
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        &failed_tasks,
+        &log_tail,
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_diagnostics;
+
+    #[test]
+    fn diagnostics_contains_versions_failed_tasks_and_log() {
+        let s = format_diagnostics(
+            "0.1.4",
+            "macos",
+            "aarch64",
+            &["#3 epub LOGIN_EXPIRED 登录已失效 2026-11-17".to_string()],
+            "2026-11-17 [INFO] app starting\n2026-11-17 [WARN] engine handshake failed: x",
+        );
+        assert!(s.contains("0.1.4"));
+        assert!(s.contains("macos (aarch64)"));
+        assert!(s.contains("LOGIN_EXPIRED"));
+        assert!(s.ends_with("engine handshake failed: x"));
+    }
+
+    #[test]
+    fn diagnostics_without_failures_shows_placeholder() {
+        let s = format_diagnostics("0.1.4", "windows", "x86_64", &[], "");
+        assert!(s.contains("（无）"));
+    }
+}
