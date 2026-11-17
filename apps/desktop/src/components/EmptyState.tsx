@@ -1,19 +1,23 @@
 import type { ReactNode } from "react";
 
-/** 空态：书脊装饰（衬线排版世界），标题 + 说明 + 可选动作 */
+/** 空态：书脊装饰（衬线排版世界），标题 + 说明 + 可选动作；centered = 居中变体 */
 export function EmptyState({
   title,
   description,
   action,
   withSpines = false,
+  centered = false,
 }: {
   title: string;
   description: string;
   action?: ReactNode;
   withSpines?: boolean;
+  centered?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-start gap-3 py-2">
+    <div
+      className={`flex flex-col gap-3 py-2 ${centered ? "items-center text-center" : "items-start"}`}
+    >
       {withSpines && <Spines />}
       <p className="font-serif text-lg text-ink">{title}</p>
       <p className="text-sm text-muted">{description}</p>

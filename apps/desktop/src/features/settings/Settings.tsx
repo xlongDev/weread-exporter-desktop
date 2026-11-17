@@ -3,6 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { api, toAppError } from "../../services/api";
 import { useSettings } from "../../stores/settings";
 import { useEngine } from "../../stores/engine";
@@ -10,7 +11,6 @@ import { useAuth } from "../../stores/auth";
 import { applyTheme, type ThemeMode } from "../../stores/theme";
 import type { PathsInfo } from "../../types";
 import { Button } from "../../components/Button";
-import { Select } from "../../components/Select";
 import { StatusPill } from "../../components/StatusPill";
 import { compareVersions, fetchLatestRelease, installCommand } from "../../utils/update";
 
@@ -133,19 +133,13 @@ export function Settings() {
         description="界面跟随系统，或手动选择浅色 / 深色。选择会立即生效并记住。"
       >
         <FieldRow label="主题">
-          <Select
+          <ThemeSwitcher
             value={themeMode}
-            onChange={(e) => {
-              const mode = e.target.value as ThemeMode;
+            onChange={(mode) => {
               applyTheme(mode);
               void write("general.theme", mode, "theme");
             }}
-          >
-            <option value="system">跟随系统</option>
-            <option value="light">浅色</option>
-            <option value="dark">深色</option>
-          </Select>
-          {saved === "theme" && <SavedStamp />}
+          />
         </FieldRow>
       </SettingSection>
 
@@ -261,6 +255,56 @@ function SavedStamp() {
   return <span className="text-xs text-faint">已保存</span>;
 }
 
+const THEME_OPTIONS: { key: ThemeMode; label: string; icon: typeof Monitor }[] = [
+  { key: "system", label: "跟随系统", icon: Monitor },
+  { key: "light", label: "浅色", icon: Sun },
+  { key: "dark", label: "深色", icon: Moon },
+];
+
+/** 三档主题切换器：横向分段 + 滑块 320ms 弹性滑动（iOS 分段控件风格） */
+function ThemeSwitcher({
+  value,
+  onChange,
+}: {
+  value: ThemeMode;
+  onChange: (mode: ThemeMode) => void;
+}) {
+  const index = Math.max(
+    0,
+    THEME_OPTIONS.findIndex((o) => o.key === value),
+  );
+  return (
+    <div
+      role="radiogroup"
+      aria-label="主题"
+      className="relative grid w-full max-w-[380px] grid-cols-3 rounded-full bg-raised p-1"
+    >
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-1 left-1 w-[calc((100%-8px)/3)] rounded-full border border-line bg-surface shadow-[0_2px_10px_rgba(0,0,0,0.18)] [transition:transform_320ms_cubic-bezier(0.32,0.72,0,1)]"
+        style={{ transform: `translateX(${index * 100}%)` }}
+      />
+      {THEME_OPTIONS.map(({ key, label, icon: Icon }) => {
+        const selected = value === key;
+        return (
+          <button
+            key={key}
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(key)}
+            className={`relative z-10 flex h-8 items-center justify-center gap-1.5 rounded-full text-sm transition-colors duration-200 ${
+              selected ? "font-medium text-ink" : "text-muted hover:text-ink"
+            }`}
+          >
+            <Icon size={14} strokeWidth={1.5} aria-hidden="true" />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function SettingSection({
   title,
   description,
@@ -276,7 +320,7 @@ function SettingSection({
         <h2 className="text-base font-semibold">{title}</h2>
         <p className="text-sm text-muted">{description}</p>
       </div>
-      <div className="flex min-w-0 flex-col gap-4 rounded-2xl bg-[var(--well)] p-4">{children}</div>
+      <div className="flex min-w-0 flex-col gap-4 rounded-[20px] border border-line bg-[var(--well)] p-4">{children}</div>
     </section>
   );
 }

@@ -90,7 +90,7 @@ export function Library() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-ink">书库</h1>
         <div className="flex items-center gap-1">
@@ -155,16 +155,19 @@ export function Library() {
       {error && <p className="text-sm text-negative-text">{error}</p>}
 
       {files.length === 0 ? (
-        <EmptyState
-          withSpines
-          title="书库为空"
-          description="导出的电子书（PDF / EPUB / Markdown）会保存在这里，可搜索、打开与整理。"
-          action={
-            <Button variant="primary" onClick={() => goto("export")}>
-              去导出第一本书
-            </Button>
-          }
-        />
+        <div className="flex min-h-[420px] flex-1 flex-col items-center justify-center">
+          <EmptyState
+            centered
+            withSpines
+            title="书库为空"
+            description="导出的电子书（PDF / EPUB / Markdown）会保存在这里，可搜索、打开与整理。"
+            action={
+              <Button variant="primary" onClick={() => goto("export")}>
+                去导出第一本书
+              </Button>
+            }
+          />
+        </div>
       ) : filtered.length === 0 ? (
         <p className="py-2 text-sm text-faint">没有匹配「{query || FORMAT_LABEL[formatFilter]}」的文件。</p>
       ) : view === "grid" ? (

@@ -17,7 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div
                 key={page}
                 data-tauri-drag-region
-                className="anim-page mx-auto flex max-w-[1080px] flex-col px-6 pt-8 pb-12"
+                className="anim-page mx-auto flex min-h-full max-w-[1080px] flex-col px-6 pt-8 pb-12"
               >
                 {children}
               </div>

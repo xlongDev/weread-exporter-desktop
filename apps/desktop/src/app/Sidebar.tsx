@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { BookOpen, LibraryBig, Settings2 } from "lucide-react";
+import { BookOpen, LibraryBig, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
 import { useNav, type Page } from "../stores/nav";
 import { useAuth, type AuthStatus } from "../stores/auth";
 
@@ -18,62 +18,128 @@ const AUTH_STATUS_LABEL: Record<AuthStatus, string> = {
   out: "未登录",
 };
 
-/** Open plane 侧栏：纸面同色 + 1px hairline，活动项灰 pill（docs/09 §4）。
- *  底部：登录状态行（登录入口在「导出书籍」页首横幅）+ 版本号 */
+const COLLAPSE_KEY = "wr.sidebar.collapsed";
+
+/** Open plane 侧栏（液态玻璃轨道）：可折叠为图标轨。
+ *  折叠动画 = 宽度 300ms 过渡 + 标签淡出；⌘B / Ctrl+B 切换；状态记入 localStorage。 */
 export function Sidebar() {
   const page = useNav((s) => s.page);
   const goto = useNav((s) => s.goto);
   const authStatus = useAuth((s) => s.status);
   const [version, setVersion] = useState("");
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
 
   useEffect(() => {
     void getVersion().then(setVersion).catch(() => {});
   }, []);
 
+  const toggle = useCallback(() => {
+    setCollapsed((v) => {
+      localStorage.setItem(COLLAPSE_KEY, v ? "0" : "1");
+      return !v;
+    });
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggle();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggle]);
+
+  const labelMotion = `overflow-hidden whitespace-nowrap transition-all duration-200 ${
+    collapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+  }`;
+
   return (
-    <aside className="glass flex w-[232px] flex-none flex-col rounded-[22px]">
-      <div data-tauri-drag-region className="flex h-11 flex-none items-center px-4 pt-1">
+    <aside
+      className={`glass relative flex flex-none flex-col overflow-hidden rounded-[22px] transition-[width] duration-300 ease-out ${
+        collapsed ? "w-[72px]" : "w-[232px]"
+      }`}
+    >
+      {/* 红绿灯行（拖拽区） */}
+      <div
+        data-tauri-drag-region
+        className={`flex h-11 flex-none items-center px-4 ${collapsed ? "justify-center" : "justify-start"}`}
+      >
         <TrafficLights />
       </div>
 
-      <div data-tauri-drag-region className="flex items-center gap-2.5 px-5 pb-2">
+      {/* 标志行（拖拽区） */}
+      <div
+        data-tauri-drag-region
+        className={`flex flex-none items-center px-5 pb-2 ${collapsed ? "justify-center" : "gap-2.5"}`}
+      >
         <Monogram />
-        <div data-tauri-drag-region className="flex flex-col gap-0.5">
-          <span data-tauri-drag-region className="font-serif text-[17px] leading-tight text-ink">
+        <div
+          data-tauri-drag-region
+          className={labelMotion}
+        >
+          <span
+            data-tauri-drag-region
+            className="block whitespace-nowrap font-serif text-[17px] leading-tight text-ink"
+          >
             WeRead Exporter
           </span>
-          <span data-tauri-drag-region className="text-xs text-muted">微信读书电子书导出</span>
+          <span data-tauri-drag-region className="block whitespace-nowrap text-xs text-muted">
+            微信读书电子书导出
+          </span>
         </div>
       </div>
 
-      <nav className="mt-4 flex flex-col gap-0.5 px-3" aria-label="主导航">
+    {/* 导航 */}
+    <nav className="flex flex-col gap-0.5 px-3" aria-label="主导航">
         {NAV.map(({ key, label, icon: Icon }) => {
           const active = page === key;
           return (
             <button
               key={key}
               onClick={() => goto(key)}
+              aria-label={label}
               aria-current={active ? "page" : undefined}
-              className={`flex h-8 items-center gap-2.5 rounded-full px-3 text-sm transition-colors ${
-                active ? "bg-raised text-ink" : "text-muted hover:bg-raised/60 hover:text-ink"
-              }`}
+              title={collapsed ? label : undefined}
+              className={`flex h-8 items-center rounded-full text-sm transition-[background-color,color,width] duration-200 ${
+                collapsed ? "w-9 justify-center self-center" : "w-full gap-2.5 px-3"
+              } ${active ? "bg-raised text-ink" : "text-muted hover:bg-raised/60 hover:text-ink"}`}
             >
               <Icon size={16} strokeWidth={1.5} aria-hidden="true" />
-              {label}
+              <span className={labelMotion}>{label}</span>
             </button>
           );
         })}
       </nav>
 
-      <div className="mt-auto flex flex-col gap-2 border-t border-rule px-5 pt-3 pb-4">
-        <p className="flex items-center gap-2 text-xs text-muted" role="status">
+      {/* 底部状态 */}
+      <div className="mt-auto flex flex-none flex-col gap-2 border-t border-rule px-5 pt-3 pb-4">
+        <p
+          className={`flex items-center text-xs text-muted ${collapsed ? "justify-center" : "gap-2"}`}
+          role="status"
+        >
           <span
             aria-hidden="true"
             className={`size-1.5 flex-none rounded-full ${authStatus === "in" ? "bg-positive" : "bg-faint"}`}
           />
-          微信读书账号 · {AUTH_STATUS_LABEL[authStatus]}
+          <span className={labelMotion}>微信读书账号 · {AUTH_STATUS_LABEL[authStatus]}</span>
         </p>
-        <span className="tnum text-xs text-faint">{version && `v${version}`}</span>
+        <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
+          <span className={`tnum text-xs text-faint ${labelMotion}`}>{version && `v${version}`}</span>
+          <button
+            onClick={toggle}
+            aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
+            title={collapsed ? "展开侧栏 (⌘B)" : "折叠侧栏 (⌘B)"}
+            className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-faint transition-colors hover:bg-raised hover:text-ink"
+          >
+            {collapsed ? (
+              <PanelLeftOpen size={15} strokeWidth={1.5} aria-hidden="true" />
+            ) : (
+              <PanelLeftClose size={15} strokeWidth={1.5} aria-hidden="true" />
+            )}
+          </button>
+        </div>
       </div>
     </aside>
   );
