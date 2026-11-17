@@ -67,6 +67,15 @@ body {
   backdrop-filter: blur(28px) saturate(1.5);
 }
 
+/* 系统"减少透明度"：玻璃退化为实心表面（低端 GPU / 辅助功能兜底，docs/09 §7） */
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--surface-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 /* 允许选择的正文区域 */
 .selectable {
   user-select: text;

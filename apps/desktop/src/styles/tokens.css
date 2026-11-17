@@ -90,3 +90,25 @@
   --pill-neutral-bg: rgba(255, 255, 255, 0.1);
   --pill-neutral-ink: #c9c6c0;
 }
+
+/* 低端 GPU / 辅助功能兜底：系统开启"减少透明度"时全部退化为实心表面 */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --surface: #fdfcfa;
+    --well: #f1efe9;
+    --raised: #e9e8e5;
+    --border: #ddd9d3;
+    --rule: #eceae6;
+    --control: #d4d2cd;
+    --surface-solid: #f7f5f2;
+  }
+  [data-theme="dark"] {
+    --surface: #1c1c1b;
+    --well: #202020;
+    --raised: #262625;
+    --border: #2b2b29;
+    --rule: #242423;
+    --control: #3a3a38;
+    --surface-solid: #1d1d1c;
+  }
+}
