@@ -36,13 +36,35 @@ body,
 
 body {
   margin: 0;
-  background: var(--ground);
+  background: transparent;
   color: var(--text);
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   user-select: none;
+}
+
+/* 自绘窗口壳（decorations:false + transparent）：超大圆角 + 液态玻璃世界；
+   contain:paint 使 fixed 浮层同样被圆角裁剪 */
+#root {
+  border-radius: 28px;
+  overflow: hidden;
+  contain: paint;
+}
+
+/* 环境光晕层：玻璃模块的后方世界（backdrop-filter 的采样对象） */
+.ambient {
+  background: var(--ambient);
+}
+
+/* 液态玻璃模块材质：模糊 + 提饱和 + 1px 高光边 + 内顶高光 + 柔影 */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  backdrop-filter: blur(28px) saturate(1.5);
 }
 
 /* 允许选择的正文区域 */
@@ -74,7 +96,8 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--control);
   border-radius: 5px;
-  border: 2px solid var(--ground);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-track {
   background: transparent;

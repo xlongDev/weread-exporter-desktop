@@ -5,7 +5,7 @@ export function Select({ className = "", children, ...rest }: SelectHTMLAttribut
   return (
     <select
       {...rest}
-      className={`h-9 rounded-[6px] border border-line bg-surface px-2.5 text-sm text-ink transition-colors hover:border-[var(--control)] ${className}`}
+      className={`h-9 rounded-full border border-line bg-surface px-3 text-sm text-ink transition-colors hover:border-[var(--control)] ${className}`}
     >
       {children}
     </select>

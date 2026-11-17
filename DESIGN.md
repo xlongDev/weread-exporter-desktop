@@ -1,12 +1,13 @@
 # DESIGN.md
 
-> 视觉世界来源：taste-skill `draw.mjs --app` 正式发牌 **Achromatic Ledger**（seed 174849170，2026-11-06），完整规范见 docs/09-ui-design-system.md。Operate 模式。
+> 视觉世界：**液态玻璃 · 超大圆角模块化**（2026-11-18 用户钦定，替换 Achromatic Ledger 发牌方向）。Operate 模式。
 
 ## The move（不可丢）
 
-Chrome 无色。色彩只给：唯一数据蓝 `--data`（进度/当前任务）与书封本身。
-主按钮近黑；表面分离靠一档灰阶或 1px 线；无阴影/渐变/玻璃/图标圆片/KPI 瓷砖。
-KPI 是文字；表格是线与对齐；数据态诚实（0 写 0，缺失写 —）。
+环境光晕之上悬浮**三块玻璃模块**：侧栏轨道 / 画布纸 / 任务舱 pill，模块间隙露出光晕。
+玻璃材质 = blur(28px) saturate(1.5) + 1px 高光边 + 内顶高光 + 柔影；一切表面半透明。
+**超大圆角体系**：壳 28 / 模块 22 / 面板 20 / 控件全 pill / 封面 10。
+色彩只给：唯一数据蓝 `--data`（进度/当前任务）与书封本身。
 
 ## Face
 
@@ -15,15 +16,19 @@ KPI 是文字；表格是线与对齐；数据态诚实（0 写 0，缺失写 �
 
 ## Signature element（本产品独有）
 
-封面墙（书库网格）+ 进度条上的真实数据（蓝 #1d5fbf / 暗色 #5b8fd9）。
-空态用"书脊"式排版占位（衬线书名），不用灰色插画。
+封面墙 + 排版书脊空态（衬线竖排书名立在搁板上）+ 玻璃任务舱 pill。
+空态用书脊占位，不用灰色插画。
 
 ## Tokens / Shell
 
-docs/09 §3 Token 表（浅/深两套 CSS 变量）+ Open plane 壳（232px 侧栏 + 纸色画布 + 1px hairline）。
+- `#root` = **28px 超大圆角壳**（decorations:false + transparent + 自绘红绿灯/拖拽区，见 Sidebar）。
+- `.ambient` = 暖纸 + 墨蓝光晕（.glass 的 backdrop 采样对象，token `--ambient` 两套主题）。
+- `.glass` = 模块材质（blur + saturate + 高光边 + 柔影）；surface/well/border/control 全半透明（tokens.css）。
+- 圆角 token：card 20 / control 12 / media 10；控件一律 rounded-full。
 
 ## Craft floor
 
-- 每屏一个 h1（名词式），标题右侧至多一个主行动。
-- 每块必有 empty/loading/error/zero 态；焦点环可见；状态不用颜色单独表达。
+- 每屏一个 h1（名词式）；每块必有 empty/loading/error/zero 态；状态不用颜色单独表达。
 - 动效 = 反馈（hover/press/进度过渡 300ms），无入场编排；reduced-motion 全降级。
+- 诚实数据：0 写 0，缺失写 —，无假进度——玻璃再花，数据不撒谎。
+- 玻璃层次纪律：模块用 `.glass`（真 blur），模块内嵌卡只用半透明填充、**不再嵌套 backdrop-filter**。

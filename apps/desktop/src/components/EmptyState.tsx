@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** 空态：书脊几何装饰（衬线书名世界），标题 + 说明 + 可选动作 */
+/** 空态：书脊装饰（衬线排版世界），标题 + 说明 + 可选动作 */
 export function EmptyState({
   title,
   description,
@@ -13,23 +13,48 @@ export function EmptyState({
   withSpines?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-start gap-2 py-2">
+    <div className="flex flex-col items-start gap-3 py-2">
       {withSpines && <Spines />}
-      <p className="font-serif text-base text-ink">{title}</p>
+      <p className="font-serif text-lg text-ink">{title}</p>
       <p className="text-sm text-muted">{description}</p>
       {action && <div className="mt-1">{action}</div>}
     </div>
   );
 }
 
-/** 三册书脊的极简几何图形 —— 只表达"书"这件事本身 */
+/** 排版书脊立在搁板上 —— 空的是"还没上架的书"，不是坏掉的图。
+ *  标签取自本应用真实产出的三种格式；末册空脊微倾，示意虚位以待。 */
 function Spines() {
   return (
-    <svg width="72" height="44" viewBox="0 0 72 44" fill="none" aria-hidden="true">
-      <rect x="4" y="2" width="14" height="40" rx="2" className="fill-raised" />
-      <rect x="24" y="8" width="14" height="34" rx="2" className="fill-raised" />
-      <rect x="44" y="2" width="14" height="40" rx="2" className="fill-control" />
-      <line x1="51" y1="8" x2="51" y2="36" stroke="var(--surface)" strokeWidth="2" />
-    </svg>
+    <div className="relative pr-9 pb-[4px]" aria-hidden="true">
+      <div className="flex items-end gap-[4px]">
+        <Spine label="PDF" height={118} />
+        <Spine label="EPUB" height={102} />
+        <Spine label="MD" height={90} />
+        <Spine height={78} lean />
+      </div>
+      <div className="absolute bottom-0 left-[-10px] right-0 h-[4px] rounded-[2px] bg-[var(--control)]" />
+    </div>
+  );
+}
+
+function Spine({ label, height, lean = false }: { label?: string; height: number; lean?: boolean }) {
+  return (
+    <div
+      style={{
+        height,
+        transform: lean ? "rotate(-7deg)" : undefined,
+        transformOrigin: "bottom right",
+      }}
+      className="flex w-[30px] flex-none flex-col items-center justify-between rounded-[4px] border border-line bg-raised px-[3px] py-[7px]"
+    >
+      <span className="block h-[3px] w-3 rounded-full bg-[var(--control)]" />
+      {label && (
+        <span className="font-serif text-[12px] leading-none text-faint [writing-mode:vertical-rl]">
+          {label}
+        </span>
+      )}
+      <span className="block h-[3px] w-3 rounded-full bg-[var(--control)]" />
+    </div>
   );
 }

@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, FolderOpen, LayoutGrid, List } from "lucide-react";
+import { BookOpen, FolderOpen, LayoutGrid, List, Trash2 } from "lucide-react";
 import { api, toAppError } from "../../services/api";
 import type { LibraryFile } from "../../types";
+import { useNav } from "../../stores/nav";
+import { groupFiles } from "../../utils/shelf";
 import { Button } from "../../components/Button";
 import { BookCover } from "../../components/BookCover";
 import { Dialog } from "../../components/Dialog";
-import { Trash2 } from "lucide-react";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusPill } from "../../components/StatusPill";
 
 const FORMAT_LABEL: Record<string, string> = { pdf: "PDF", epub: "EPUB", markdown: "Markdown" };
 
-/** 书库：导出产物的封面墙 / 列表，搜索筛选与文件管理（docs/04 §4.4） */
+/** 书库：书架（按书的封面墙 + 格式文件行，默认）与文件列表（按文件平铺）两种视图 */
 export function Library() {
   const [files, setFiles] = useState<LibraryFile[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +21,7 @@ export function Library() {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [pendingDelete, setPendingDelete] = useState<LibraryFile | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const goto = useNav((s) => s.goto);
 
   async function load() {
     try {
@@ -34,6 +36,7 @@ export function Library() {
     void load();
   }, []);
 
+  // 先过滤文件（书名/作者 + 格式），再按书聚合 —— 搜索命中即整本书出现，格式筛选则只留该格式的文件行
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return files.filter((f) => {
@@ -42,6 +45,8 @@ export function Library() {
       return f.title.toLowerCase().includes(q) || f.author.toLowerCase().includes(q);
     });
   }, [files, query, formatFilter]);
+
+  const shelfBooks = useMemo(() => groupFiles(filtered), [filtered]);
 
   async function open(f: LibraryFile) {
     try {
@@ -116,7 +121,7 @@ export function Library() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索书名或作者"
           spellCheck={false}
-          className="h-8 w-64 rounded-[6px] border border-line bg-surface px-3 text-sm outline-none placeholder:text-faint focus:border-[var(--data)]"
+          className="h-8 w-64 rounded-full border border-line bg-surface px-3 text-sm outline-none placeholder:text-faint focus:border-[var(--data)]"
           aria-label="搜索书库"
         />
         {["all", "pdf", "epub", "markdown"].map((fmt) => (
@@ -140,7 +145,11 @@ export function Library() {
           <Trash2 size={14} strokeWidth={1.5} aria-hidden="true" />
           清除记录
         </Button>
-        <span className="tnum text-xs text-faint">{filtered.length} 个文件</span>
+        <span className="tnum text-xs text-faint">
+          {view === "grid"
+            ? `${shelfBooks.length} 本书 · ${filtered.length} 个文件`
+            : `${filtered.length} 个文件`}
+        </span>
       </div>
 
       {error && <p className="text-sm text-negative-text">{error}</p>}
@@ -150,32 +159,56 @@ export function Library() {
           withSpines
           title="书库为空"
           description="导出的电子书（PDF / EPUB / Markdown）会保存在这里，可搜索、打开与整理。"
+          action={
+            <Button variant="primary" onClick={() => goto("export")}>
+              去导出第一本书
+            </Button>
+          }
         />
       ) : filtered.length === 0 ? (
         <p className="py-2 text-sm text-faint">没有匹配「{query || FORMAT_LABEL[formatFilter]}」的文件。</p>
       ) : view === "grid" ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-x-4 gap-y-6">
-          {filtered.map((f) => (
-            <div key={f.id} className="group flex flex-col gap-2">
-              <div className="relative">
-                <BookCover path={f.cover_path} title={f.title || f.book_id} width={140} />
-                {!f.exists_ok && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-[3px] bg-black/45">
-                    <span className="text-xs text-white">文件缺失</span>
-                  </div>
-                )}
-                <div className="pointer-events-none absolute inset-x-0 bottom-1.5 flex justify-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-                  <MiniAction label="打开文件" onClick={() => void open(f)} icon={<BookOpen size={14} strokeWidth={1.5} />} disabled={!f.exists_ok} />
-                  <MiniAction label="定位文件" onClick={() => void reveal(f)} icon={<FolderOpen size={14} strokeWidth={1.5} />} />
-                  <MiniAction label="删除" onClick={() => setPendingDelete(f)} icon={<Trash2 size={14} strokeWidth={1.5} />} />
-                </div>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] items-start gap-x-5 gap-y-7">
+          {shelfBooks.map((b) => (
+            <div key={b.bookId} className="flex flex-col">
+              <BookCover fill path={b.coverPath} title={b.title} />
+              <div className="mt-2.5 flex flex-col gap-0.5">
+                <span className="line-clamp-2 font-serif text-[15px] leading-snug">{b.title}</span>
+                <span className="truncate text-xs text-muted">{b.author || "—"}</span>
               </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="line-clamp-2 text-sm leading-snug">{f.title || f.book_id}</span>
-                <span className="truncate text-xs text-muted">{f.author || "—"}</span>
-                <span className="tnum text-xs text-faint">
-                  {FORMAT_LABEL[f.format] ?? f.format} · {formatSize(f.file_size)} · {formatDate(f.created_at)}
-                </span>
+              <div className="mt-2 flex flex-col border-t border-rule pt-1">
+                {b.files.map((f) => (
+                  <div key={f.id} className="flex items-center gap-0.5 py-1">
+                    <button
+                      onClick={() => void open(f)}
+                      disabled={!f.exists_ok}
+                      className="flex min-w-0 flex-1 items-baseline gap-2 rounded-[4px] px-1 py-0.5 text-left transition-colors hover:bg-raised/60 disabled:cursor-not-allowed"
+                      aria-label={`打开《${b.title}》${FORMAT_LABEL[f.format] ?? f.format}文件`}
+                      title={f.exists_ok ? undefined : "文件缺失，无法打开"}
+                    >
+                      <span className="flex-none text-xs font-medium">
+                        {FORMAT_LABEL[f.format] ?? f.format}
+                      </span>
+                      <span
+                        className={`tnum min-w-0 flex-1 truncate text-xs ${
+                          f.exists_ok ? "text-faint" : "text-negative-text"
+                        }`}
+                      >
+                        {f.exists_ok ? formatSize(f.file_size) : "文件缺失"}
+                      </span>
+                    </button>
+                    <RowAction
+                      label="定位文件"
+                      onClick={() => void reveal(f)}
+                      icon={<FolderOpen size={13} strokeWidth={1.5} aria-hidden="true" />}
+                    />
+                    <RowAction
+                      label="删除"
+                      onClick={() => setPendingDelete(f)}
+                      icon={<Trash2 size={13} strokeWidth={1.5} aria-hidden="true" />}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           ))}
@@ -226,7 +259,7 @@ export function Library() {
         >
           <p className="tnum">将删除全部 {files.length} 条书库记录。</p>
           <p className="text-xs">
-            只删除记录，磁盘上的导出文件不受影响；如需连文件一起删除，请逐条使用卡片上的删除按钮。
+            只删除记录，磁盘上的导出文件不受影响；如需连文件一起删除，请逐条使用文件行的删除按钮。
           </p>
         </Dialog>
       )}
@@ -261,24 +294,14 @@ export function Library() {
   );
 }
 
-function MiniAction({
-  label,
-  icon,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
+/** 文件行内小动作：无边的 24px 图标按钮（区别于封面悬浮的描边圆钮） */
+function RowAction({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      disabled={disabled}
       aria-label={label}
       title={label}
-      className="flex h-7 w-7 items-center justify-center rounded-full border border-line bg-surface text-ink transition-colors hover:bg-raised disabled:opacity-40"
+      className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-faint transition-colors hover:bg-raised hover:text-ink"
     >
       {icon}
     </button>

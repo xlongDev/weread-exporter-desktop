@@ -160,11 +160,6 @@ export function Settings() {
           <Button onClick={() => void pickOutputDir()}>选择目录…</Button>
           {saved === "output_dir" && <SavedStamp />}
         </FieldRow>
-        <FieldRow label="导出格式">
-          <span className="text-sm text-muted">
-            PDF / EPUB / Markdown（引擎实际支持的格式，导出时可多选）
-          </span>
-        </FieldRow>
       </SettingSection>
 
       <SettingSection

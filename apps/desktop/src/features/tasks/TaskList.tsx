@@ -1,21 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, FolderOpen, Minus, X } from "lucide-react";
 import { api, toAppError } from "../../services/api";
-import { useTasks } from "../../stores/tasks";
 import type { TaskDetail, TaskRow } from "../../types";
 import { Button } from "../../components/Button";
 import { BookCover } from "../../components/BookCover";
-import { Dialog } from "../../components/Dialog";
 import { Drawer } from "../../components/Drawer";
 import { StatusPill, type PillTone } from "../../components/StatusPill";
-
-const STATUS_LABEL: Record<TaskRow["status"], string> = {
-  waiting: "等待中",
-  running: "执行中",
-  completed: "已完成",
-  cancelled: "已取消",
-  failed: "失败",
-};
 
 const STATUS_TONE: Record<TaskRow["status"], PillTone> = {
   waiting: "neutral",
@@ -25,106 +15,153 @@ const STATUS_TONE: Record<TaskRow["status"], PillTone> = {
   failed: "negative",
 };
 
-const FORMAT_LABEL: Record<string, string> = {
+const STATUS_LABEL: Record<TaskRow["status"], string> = {
+  waiting: "等待中",
+  running: "执行中",
+  completed: "已完成",
+  cancelled: "已取消",
+  failed: "失败",
+};
+
+export const FORMAT_LABEL: Record<string, string> = {
   pdf: "PDF",
   epub: "EPUB",
   markdown: "Markdown",
 };
 
-/** 任务中心：真实进度、取消与输出定位（docs/04 §4.3） */
-export function Tasks() {
-  const { tasks, loadError, load } = useTasks();
-  const [detailId, setDetailId] = useState<number | null>(null);
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [clearError, setClearError] = useState<string | null>(null);
+export function stageLabel(stage: string): string {
+  const map: Record<string, string> = {
+    auth: "等待登录",
+    metadata: "读取书籍信息",
+    crawl: "抓取正文",
+    images: "下载插图",
+    render: "生成文件",
+  };
+  return map[stage] ?? stage;
+}
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+function formatWords(n: number): string {
+  return n >= 10000 ? `${(n / 10000).toFixed(1)} 万字` : `${n} 字`;
+}
 
-  const clearable = tasks.filter((t) => t.status !== "running" && t.status !== "waiting").length;
+function elapsedText(startedAt: string | null, finishedAt: string | null): string {
+  if (!startedAt) return "—";
+  const start = Date.parse(startedAt.endsWith("Z") ? startedAt : `${startedAt}Z`);
+  const end = finishedAt ? Date.parse(finishedAt.endsWith("Z") ? finishedAt : `${finishedAt}Z`) : Date.now();
+  if (Number.isNaN(start)) return "—";
+  const sec = Math.max(0, Math.floor((end - start) / 1000));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+}
 
-  async function clearFinished() {
-    try {
-      await api.clearFinishedTasks();
-      setConfirmClear(false);
-      setClearError(null);
-      await load();
-    } catch (e) {
-      setClearError(toAppError(e).userMessage);
-    }
+/** current_chapter 是章节标题；引擎偶发传纯数字（如 "0"），显示出来就是孤立的 "· 0" —— 过滤 */
+function chapterSuffix(chapter: string): string {
+  return chapter && !/^\d+$/.test(chapter) ? ` · ${chapter}` : "";
+}
+
+/** 任务按书分组：用户按"一本书的三次导出"思考，不按任务行（IA 重构第 2 步）。
+ *  组内活动任务（执行 → 排队）在前，已结束按创建序；组间按列表最近活动序。 */
+interface TaskGroup {
+  bookId: string;
+  title: string;
+  coverPath?: string;
+  tasks: TaskRow[];
+}
+
+const STATUS_RANK: Record<TaskRow["status"], number> = {
+  running: 0,
+  waiting: 1,
+  completed: 2,
+  failed: 2,
+  cancelled: 2,
+};
+
+function groupTasks(tasks: TaskRow[]): TaskGroup[] {
+  const map = new Map<string, TaskRow[]>();
+  for (const t of tasks) {
+    const list = map.get(t.book_id);
+    if (list) list.push(t);
+    else map.set(t.book_id, [t]);
   }
+  return [...map.entries()].map(([bookId, list]) => ({
+    bookId,
+    title: list[0]?.title || bookId,
+    coverPath: list.find((t) => t.cover_path)?.cover_path,
+    tasks: [...list].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.id - b.id),
+  }));
+}
+
+/** 任务列表：按书分组，行内取消/定位 + 详情抽屉（docs/04 §4.3），由任务 dock 面板复用 */
+export function TaskList({ tasks, onChanged }: { tasks: TaskRow[]; onChanged: () => void }) {
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const groups = useMemo(() => groupTasks(tasks), [tasks]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-ink">任务中心</h1>
-        {tasks.length > 0 && (
-          <Button
-            variant="ghost"
-            disabled={clearable === 0}
-            title={clearable === 0 ? "没有可清除的已结束任务" : undefined}
-            onClick={() => setConfirmClear(true)}
-          >
-            清除记录
-          </Button>
-        )}
+    <>
+      <div className="flex flex-col gap-5 pt-1 pb-1">
+        {groups.map((g) => (
+          <TaskGroupItem key={g.bookId} group={g} onOpen={setDetailId} />
+        ))}
       </div>
-      {clearError && <p className="text-sm text-negative-text">{clearError}</p>}
-
-      {confirmClear && (
-        <Dialog
-          title="清除已结束的任务记录？"
-          onClose={() => setConfirmClear(false)}
-          actions={
-            <>
-              <Button variant="ghost" onClick={() => setConfirmClear(false)}>
-                取消
-              </Button>
-              <Button onClick={() => void clearFinished()}>清除</Button>
-            </>
-          }
-        >
-          <p className="tnum">
-            将删除 {clearable} 条已完成 / 已取消 / 已失败的任务记录（进行中与排队中的不受影响）。
-          </p>
-          <p className="text-xs text-faint">已导出的文件与书库记录不会被删除。</p>
-        </Dialog>
-      )}
-
-      {loadError && (
-        <p className="text-sm text-negative-text">
-          任务列表读取失败：{loadError}
-          <button className="ml-2 underline" onClick={() => void load()}>
-            重试
-          </button>
-        </p>
-      )}
-
-      {tasks.length === 0 ? (
-        <p className="py-2 text-sm text-faint">
-          暂无任务。在「导出书籍」中创建导出任务后会出现在这里。
-        </p>
-      ) : (
-        <ul className="flex flex-col">
-          {tasks.map((t) => (
-            <TaskItem key={t.id} task={t} onOpen={() => setDetailId(t.id)} />
-          ))}
-        </ul>
-      )}
-
       {detailId !== null && (
         <TaskDetailDrawer
           taskId={detailId}
           onClose={() => setDetailId(null)}
-          onChanged={() => void load()}
+          onChanged={onChanged}
         />
       )}
+    </>
+  );
+}
+
+function TaskGroupItem({
+  group,
+  onOpen,
+}: {
+  group: TaskGroup;
+  onOpen: (id: number) => void;
+}) {
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-3 py-1.5">
+        <BookCover path={group.coverPath} title={group.title} width={40} />
+        <span className="min-w-0 truncate text-sm font-medium">{group.title}</span>
+      </div>
+      <div className="ml-[52px] flex flex-col">
+        {group.tasks.map((t) => (
+          <FormatRow key={t.id} task={t} onOpen={() => onOpen(t.id)} />
+        ))}
+      </div>
     </div>
   );
 }
 
-function TaskItem({ task, onOpen }: { task: TaskRow; onOpen: () => void }) {
+/** 状态记号：形状承载状态语义（点/圈/勾/叉/横），色彩只作辅助 —— 不用颜色单独表达 */
+function StatusGlyph({ status }: { status: TaskRow["status"] }) {
+  switch (status) {
+    case "running":
+      return (
+        <span className="flex w-3.5 flex-none items-center justify-center" aria-label={STATUS_LABEL[status]}>
+          <span className="block size-1.5 rounded-full bg-data" aria-hidden="true" />
+        </span>
+      );
+    case "waiting":
+      return (
+        <span className="flex w-3.5 flex-none items-center justify-center" aria-label={STATUS_LABEL[status]}>
+          <span className="block size-1.5 rounded-full border border-faint" aria-hidden="true" />
+        </span>
+      );
+    case "completed":
+      return <Check size={12} strokeWidth={2} className="flex-none text-positive" aria-label={STATUS_LABEL[status]} />;
+    case "failed":
+      return <X size={12} strokeWidth={2} className="flex-none text-negative" aria-label={STATUS_LABEL[status]} />;
+    case "cancelled":
+      return <Minus size={12} strokeWidth={2} className="flex-none text-faint" aria-label={STATUS_LABEL[status]} />;
+  }
+}
+
+function FormatRow({ task, onOpen }: { task: TaskRow; onOpen: () => void }) {
   const [, setTick] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -153,55 +190,53 @@ function TaskItem({ task, onOpen }: { task: TaskRow; onOpen: () => void }) {
   }
 
   return (
-    <li className="flex gap-4 border-b border-rule py-4 last:border-b-0">
+    <div className="flex items-center gap-2.5 py-1.5">
+      <span className="w-14 flex-none text-xs text-faint">{FORMAT_LABEL[task.format] ?? task.format}</span>
+      <StatusGlyph status={task.status} />
+
       <button
         onClick={onOpen}
-        className="flex min-w-0 flex-1 items-start gap-4 text-left"
+        className="min-w-0 flex-1 text-left"
         aria-label={`查看任务详情：${task.title || task.book_id}`}
       >
-        <BookCover path={task.cover_path} title={task.title || task.book_id} width={56} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-medium">{task.title || task.book_id}</span>
-            <span className="text-xs text-faint">{FORMAT_LABEL[task.format] ?? task.format}</span>
-            <StatusPill tone={STATUS_TONE[task.status]}>{STATUS_LABEL[task.status]}</StatusPill>
-          </div>
-
-          {task.status === "running" && (
-            <>
-              <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-raised">
-                <div
-                  className="h-full rounded-full bg-data transition-[width] duration-300"
-                  style={{ width: `${Math.max(2, task.progress)}%` }}
-                />
-              </div>
-              <p className="tnum text-xs text-muted">
-                {stageLabel(task.current_stage)}
-                {task.current_chapter && ` · ${task.current_chapter}`}
-                {task.chapters_done > 0 && ` · 已完成 ${task.chapters_done} 章`}
-                {task.pages_done > 0 && ` · ${task.pages_done} 页`}
-                {task.words_done > 0 && ` · ${formatWords(task.words_done)}`}
-                {` · 已用时 ${elapsedText(task.started_at, null)}`}
-              </p>
-            </>
-          )}
-          {task.status === "waiting" && (
-            <p className="tnum text-xs text-muted">排队等待中（同一时刻执行一个抓取任务）</p>
-          )}
-          {task.status === "failed" && (
-            <p className="text-xs text-negative-text">
-              {task.error_message ?? "任务失败"}
-              {task.error_code && `（${task.error_code}）`}
-            </p>
-          )}
-          {task.status === "completed" && (
-            <p className="tnum text-xs text-muted">
-              输出目录：{task.output_dir} · {elapsedText(task.started_at, task.finished_at)}
-            </p>
-          )}
-          {actionError && <p className="text-xs text-negative-text">{actionError}</p>}
-        </div>
+        {task.status === "running" && (
+          <span className="flex flex-col gap-1">
+            <span className="h-1 w-full max-w-[280px] overflow-hidden rounded-full bg-raised">
+              <span
+                className="block h-full rounded-full bg-data transition-[width] duration-300"
+                style={{ width: `${Math.max(2, task.progress)}%` }}
+              />
+            </span>
+            <span className="tnum truncate text-xs text-muted">
+              {stageLabel(task.current_stage)}
+              {chapterSuffix(task.current_chapter)}
+              {task.chapters_done > 0 && ` · 已完成 ${task.chapters_done} 章`}
+              {task.pages_done > 0 && ` · ${task.pages_done} 页`}
+              {task.words_done > 0 && ` · ${formatWords(task.words_done)}`}
+              {` · 已用时 ${elapsedText(task.started_at, null)}`}
+            </span>
+          </span>
+        )}
+        {task.status === "waiting" && (
+          <span className="text-xs text-muted">排队等待中</span>
+        )}
+        {task.status === "failed" && (
+          <span className="truncate text-xs text-negative-text">
+            {task.error_message ?? "任务失败"}
+            {task.error_code && `（${task.error_code}）`}
+          </span>
+        )}
+        {task.status === "completed" && (
+          <span className="tnum truncate text-xs text-muted">
+            已完成 · 用时 {elapsedText(task.started_at, task.finished_at)}
+          </span>
+        )}
+        {task.status === "cancelled" && (
+          <span className="text-xs text-faint">已取消</span>
+        )}
       </button>
+
+      {actionError && <span className="flex-none text-xs text-negative-text">{actionError}</span>}
 
       <div className="flex flex-none items-center gap-1.5">
         {(task.status === "running" || task.status === "waiting") && (
@@ -217,7 +252,7 @@ function TaskItem({ task, onOpen }: { task: TaskRow; onOpen: () => void }) {
           </Button>
         )}
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -369,30 +404,4 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
       <dd className="min-w-0 flex-1">{children}</dd>
     </div>
   );
-}
-
-function stageLabel(stage: string): string {
-  const map: Record<string, string> = {
-    auth: "等待登录",
-    metadata: "读取书籍信息",
-    crawl: "抓取正文",
-    images: "下载插图",
-    render: "生成文件",
-  };
-  return map[stage] ?? stage;
-}
-
-function formatWords(n: number): string {
-  return n >= 10000 ? `${(n / 10000).toFixed(1)} 万字` : `${n} 字`;
-}
-
-function elapsedText(startedAt: string | null, finishedAt: string | null): string {
-  if (!startedAt) return "—";
-  const start = Date.parse(startedAt.endsWith("Z") ? startedAt : `${startedAt}Z`);
-  const end = finishedAt ? Date.parse(finishedAt.endsWith("Z") ? finishedAt : `${finishedAt}Z`) : Date.now();
-  if (Number.isNaN(start)) return "—";
-  const sec = Math.max(0, Math.floor((end - start) / 1000));
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
 }

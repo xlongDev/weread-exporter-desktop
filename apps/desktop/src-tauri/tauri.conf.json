@@ -13,10 +13,14 @@
     "windows": [
       {
         "title": "WeRead Exporter",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 1080,
-        "minHeight": 720
+        "width": 1080,
+        "height": 720,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true
       }
     ],
     "security": {

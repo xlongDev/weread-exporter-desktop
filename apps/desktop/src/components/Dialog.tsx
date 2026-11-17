@@ -23,7 +23,7 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="anim-dialog mx-4 w-full max-w-[440px] rounded-card border border-line bg-surface p-5 shadow-[0_8px_32px_rgba(0,0,0,0.18)]"
+        className="anim-dialog glass mx-4 w-full max-w-[440px] rounded-[24px] p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-semibold text-ink">{title}</h2>
