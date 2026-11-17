@@ -4,9 +4,9 @@
   "version": "0.1.6",
   "identifier": "com.weread.exporter.desktop",
   "build": {
-    "beforeDevCommand": "bash ../../scripts/prepare-runtime.sh && npm run dev",
+    "beforeDevCommand": "bash ../../scripts/prepare-runtime.sh && pnpm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bash ../../scripts/prepare-runtime.sh && npm run build",
+    "beforeBuildCommand": "bash ../../scripts/prepare-runtime.sh && pnpm run build",
     "frontendDist": "../dist"
   },
   "app": {
