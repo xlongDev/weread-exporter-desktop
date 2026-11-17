@@ -9,6 +9,7 @@
 """
 import asyncio
 import base64
+import datetime
 import hashlib
 import json
 import os
@@ -159,13 +160,31 @@ def read_book(book_id, output_dir=None):
     return root, heads + chaps
 
 
-def build_markdown_files(book_id, title, texts, output_dir=None, progress=None):
+def build_base_name(template, title, author, fmt_label, book_id):
+    """按用户模板渲染导出文件名（占位符：{书名} {作者} {格式} {日期}）。
+
+    模板为空返回 None —— 调用方沿用各自的历史默认命名。
+    """
+    if not template:
+        return None
+    name = (
+        str(template)
+        .replace("{书名}", title or book_id)
+        .replace("{作者}", author or "")
+        .replace("{格式}", fmt_label)
+        .replace("{日期}", datetime.date.today().strftime("%Y%m%d"))
+    )
+    return re.sub(r'[<>:"/\\|?*]', "_", name).strip() or (title or book_id)
+
+
+def build_markdown_files(book_id, title, author, texts, output_dir=None, progress=None, filename_template=None):
     out_dir = output_dir if output_dir else os.path.join(BASE, "output")
     os.makedirs(out_dir, exist_ok=True)
     refined = [refine_chapter_text(t) for t in texts]
 
     safe_title = re.sub(r'[<>:"/\\|?*]', "_", title) or book_id
-    html_md_path = os.path.join(out_dir, f"{safe_title}_全书合并_HTML排版版.md")
+    base = build_base_name(filename_template, title, author, "Markdown", book_id) or safe_title
+    html_md_path = os.path.join(out_dir, f"{base}_全书合并_HTML排版版.md")
     with open(html_md_path, "w", encoding="utf-8") as f:
         f.write("\n\n---\n\n".join(refined))
 
@@ -175,7 +194,7 @@ def build_markdown_files(book_id, title, texts, output_dir=None, progress=None):
         t = re.sub(r'<p class="fang">(.*?)</p>', r'> *\1*', t)
         pure_chaps.append(t)
 
-    pure_md_path = os.path.join(out_dir, f"{safe_title}_纯Markdown笔记版.md")
+    pure_md_path = os.path.join(out_dir, f"{base}_纯Markdown笔记版.md")
     with open(pure_md_path, "w", encoding="utf-8") as f:
         f.write("\n\n---\n\n".join(pure_chaps))
 
@@ -187,7 +206,7 @@ def build_markdown_files(book_id, title, texts, output_dir=None, progress=None):
     return outputs
 
 
-def build_epub(book_id, root, title, author, texts, output_dir=None, progress=None):
+def build_epub(book_id, root, title, author, texts, output_dir=None, progress=None, filename_template=None):
     try:
         import markdown
         from ebooklib import epub
@@ -248,7 +267,8 @@ def build_epub(book_id, root, title, author, texts, output_dir=None, progress=No
     book.spine = (["cover"] if has_cover else []) + ["nav"] + items
 
     safe = re.sub(r'[<>:"/\\|?*]', "_", title) or book_id
-    out_epub = os.path.join(output_dir if output_dir else os.path.join(BASE, "output"), f"{safe}（双字体精排）.epub")
+    base = build_base_name(filename_template, title, author, "EPUB", book_id) or f"{safe}（双字体精排）"
+    out_epub = os.path.join(output_dir if output_dir else os.path.join(BASE, "output"), f"{base}.epub")
     epub.write_epub(out_epub, book)
     print(f"📘 EPUB 电子书生成完成: {out_epub}", flush=True)
     if progress:
@@ -314,7 +334,7 @@ async def launch_browser_headless(p):
     raise RuntimeError("未检测到可用浏览器渲染 PDF，请安装 Google Chrome 或 Microsoft Edge")
 
 
-async def build_pdf(book_id, root, title, author, intro, texts, output_dir=None, progress=None):
+async def build_pdf(book_id, root, title, author, intro, texts, output_dir=None, progress=None, filename_template=None):
     img_dir = os.path.join(root, "images")
     cover_path = os.path.join(root, "cover.jpg")
     cover_uri = img_to_data_uri(cover_path)
@@ -425,7 +445,8 @@ p.yw {{
     safe = re.sub(r'[<>:"/\\|?*]', "_", title) or book_id
     out_root = output_dir if output_dir else os.path.join(BASE, "output")
     html_path = os.path.join(out_root, f"_temp_{book_id}.html")
-    pdf_path = os.path.join(out_root, f"{safe}（双字体精排）.pdf")
+    base = build_base_name(filename_template, title, author, "PDF", book_id) or f"{safe}（双字体精排）"
+    pdf_path = os.path.join(out_root, f"{base}.pdf")
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)
 
@@ -460,12 +481,13 @@ p.yw {{
     return pdf_path
 
 
-async def main(book_id_or_url, output_dir=None, formats=None, progress=None):
+async def main(book_id_or_url, output_dir=None, formats=None, progress=None, filename_template=None):
     """多格式导出入口。
 
     output_dir: 输出根目录覆盖（None = BASE/output）。
     formats: 要生成的格式列表（'markdown' | 'epub' | 'pdf'，None = 全部）。
     progress: 可选回调（kind: stage/output）。返回产物文件路径列表（失败返回 []）。
+    filename_template: 可选文件名模板（占位符 {书名} {作者} {格式} {日期}；None/空 = 默认命名）。
     """
     def _emit(payload):
         if progress:
@@ -505,15 +527,18 @@ async def main(book_id_or_url, output_dir=None, formats=None, progress=None):
     outputs = []
     if "markdown" in wanted:
         _emit({"kind": "stage", "stage": "render", "format": "markdown"})
-        outputs.extend(build_markdown_files(book_id, title, texts, output_dir=output_dir, progress=_emit))
+        outputs.extend(build_markdown_files(
+            book_id, title, author, texts,
+            output_dir=output_dir, progress=_emit, filename_template=filename_template,
+        ))
     if "epub" in wanted:
         _emit({"kind": "stage", "stage": "render", "format": "epub"})
-        p = build_epub(book_id, root, title, author, texts, output_dir=output_dir, progress=_emit)
+        p = build_epub(book_id, root, title, author, texts, output_dir=output_dir, progress=_emit, filename_template=filename_template)
         if p:
             outputs.append(p)
     if "pdf" in wanted:
         _emit({"kind": "stage", "stage": "render", "format": "pdf"})
-        p = await build_pdf(book_id, root, title, author, intro, texts, output_dir=output_dir, progress=_emit)
+        p = await build_pdf(book_id, root, title, author, intro, texts, output_dir=output_dir, progress=_emit, filename_template=filename_template)
         if p:
             outputs.append(p)
     print(f"\n🎉 电子书已生成完毕，保存在: {output_dir if output_dir else os.path.join(BASE, 'output')}\n")

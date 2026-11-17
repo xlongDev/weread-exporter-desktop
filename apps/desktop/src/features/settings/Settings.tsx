@@ -31,6 +31,7 @@ export function Settings() {
   const [saved, setSaved] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus>({ status: "idle" });
+  const [namingDraft, setNamingDraft] = useState("");
 
   useEffect(() => {
     void load();
@@ -40,6 +41,18 @@ export function Settings() {
       .catch((e) => setActionError(toAppError(e).userMessage));
     void getVersion().then(setAppVersion).catch(() => setAppVersion("unknown"));
   }, [load]);
+
+  // 文件名模板草稿：跟随已保存设置刷新（保存后与本地草稿对齐）
+  useEffect(() => {
+    const v = settings?.["export.naming"];
+    setNamingDraft(typeof v === "string" ? v : "");
+  }, [settings]);
+
+  async function saveNaming() {
+    const savedValue = typeof settings?.["export.naming"] === "string" ? (settings?.["export.naming"] as string) : "";
+    if (namingDraft.trim() === savedValue.trim()) return;
+    await write("export.naming", namingDraft.trim(), "naming");
+  }
 
   async function write(key: string, value: unknown, label: string) {
     try {
@@ -153,6 +166,25 @@ export function Settings() {
           </span>
           <Button onClick={() => void pickOutputDir()}>选择目录…</Button>
           {saved === "output_dir" && <SavedStamp />}
+        </FieldRow>
+        <FieldRow label="文件名模板">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <input
+              value={namingDraft}
+              onChange={(e) => setNamingDraft(e.target.value)}
+              onBlur={() => void saveNaming()}
+              onKeyDown={(e) => e.key === "Enter" && void saveNaming()}
+              placeholder="留空使用默认命名"
+              spellCheck={false}
+              className="h-9 w-full max-w-[380px] rounded-full border border-line bg-surface px-3.5 text-sm outline-none placeholder:text-faint focus:border-[var(--data)]"
+              aria-label="导出文件名模板"
+            />
+            <p className="text-xs text-faint">
+              可用占位符：<code className="tnum">{"{书名}"} {"{作者}"} {"{格式}"} {"{日期}"}</code>
+              ；失焦或回车保存，例：<code className="tnum">{"{书名}"}-{"{作者}"}</code>
+            </p>
+          </div>
+          {saved === "naming" && <SavedStamp />}
         </FieldRow>
       </SettingSection>
 

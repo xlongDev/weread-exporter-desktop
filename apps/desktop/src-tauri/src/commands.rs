@@ -192,6 +192,19 @@ pub fn create_task(
     };
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建输出目录失败: {e}"))?;
 
+    // 文件名模板（export.naming，空 = 引擎默认命名）：随任务参数传给引擎
+    let mut options = serde_json::json!({});
+    {
+        let conn = state.db.lock().map_err(lock_err)?;
+        let tmpl = read_settings(&conn)?
+            .get("export.naming")
+            .and_then(|v| v.as_str().map(|s| s.trim().to_string()))
+            .unwrap_or_default();
+        if !tmpl.is_empty() {
+            options["filename_template"] = Value::String(tmpl);
+        }
+    }
+
     let task_id = {
         let conn = state.db.lock().map_err(lock_err)?;
         let exists: Option<bool> = conn
@@ -218,7 +231,7 @@ pub fn create_task(
             book_id,
             format,
             output_dir: dir,
-            options: serde_json::json!({}),
+            options,
         },
     )?;
     if started {
@@ -428,6 +441,26 @@ pub fn list_files(state: State<'_, AppState>) -> Result<Vec<LibraryFile>, String
     for row in rows {
         let mut f = row.map_err(|e| format!("读取书库行失败: {e}"))?;
         f.exists_ok = std::path::Path::new(&f.file_path).is_file();
+        // 封面兜底：书籍记录缺封面（旧记录/补下失败）时，回退到导出目录内随书携带的
+        // cover.jpg（抓取数据根 <输出目录>/<book_id>_v2/），拷入应用数据目录以命中 asset 协议范围
+        if f.cover_path.is_empty() || !std::path::Path::new(&f.cover_path).is_file() {
+            let bundled = std::path::Path::new(&f.file_path)
+                .parent()
+                .map(|p| p.join(format!("{}_v2", f.book_id)).join("cover.jpg"));
+            if let Some(src) = bundled {
+                if src.is_file() {
+                    let dest_dir = state.paths.app_data.join("covers");
+                    let _ = std::fs::create_dir_all(&dest_dir);
+                    let dest = dest_dir.join(format!("{}_export.jpg", f.book_id));
+                    if !dest.is_file() {
+                        let _ = std::fs::copy(&src, &dest);
+                    }
+                    if dest.is_file() {
+                        f.cover_path = dest.to_string_lossy().into_owned();
+                    }
+                }
+            }
+        }
         let _ = conn.execute(
             "UPDATE exported_files SET exists_ok=?2 WHERE id=?1",
             rusqlite::params![f.id, f.exists_ok as i64],
