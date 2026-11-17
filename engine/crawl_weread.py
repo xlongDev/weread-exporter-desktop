@@ -566,11 +566,19 @@ class LoginExpiredError(RuntimeError):
 
 
 async def check_cookies_login(ctx):
-    """基于真实鉴权凭证检查登录态，彻底避免访客目录误判"""
+    """检查登录态：凭证存在 + 服务端确认（wr_skey 过期时 cookie 仍残留，仅查 cookie 会误判已登录）。
+
+    shelf/sync 实测形态：有效会话返回书架数据（无 errCode 字段）；会话失效返回
+    {"errCode":-2010,"errMsg":"用户不存在"} 或 {"errCode":-2012,...}。
+    """
     try:
         cookies = await ctx.cookies()
         names = {c["name"] for c in cookies}
-        return "wr_vid" in names and ("wr_skey" in names or "wr_rt" in names)
+        if "wr_vid" not in names or ("wr_skey" not in names and "wr_rt" not in names):
+            return False
+        resp = await ctx.request.get("https://weread.qq.com/web/shelf/sync", timeout=15000)
+        data = await resp.json()
+        return "errCode" not in data
     except Exception:
         return False
 
