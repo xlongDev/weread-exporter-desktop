@@ -27,6 +27,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # packageManager 字段在 apps/desktop/package.json，action 从根目录找不到，需显式版本
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -44,12 +48,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-      - name: 前端依赖 + 类型检查 + 测试 + 构建
+      - name: 前端依赖 + lint + 类型检查 + 测试 + 构建
         working-directory: apps/desktop
         run: |
-          npm install
-          npm run test
-          npm run build
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm test
+          pnpm build
       - name: cargo clippy
         working-directory: apps/desktop/src-tauri
         run: cargo clippy -- -D warnings

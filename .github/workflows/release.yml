@@ -25,6 +25,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # packageManager 字段在 apps/desktop/package.json，action 从根目录找不到，需显式版本
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -36,7 +40,7 @@ jobs:
         run: echo "runner 自带 WebView2 与 MSVC"
       - name: 前端依赖
         working-directory: apps/desktop
-        run: npm install
+        run: pnpm install --frozen-lockfile
       - name: 组装捆绑运行时 + 生产构建
         working-directory: apps/desktop
         shell: bash
