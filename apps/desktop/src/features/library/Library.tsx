@@ -171,7 +171,7 @@ export function Library() {
       ) : filtered.length === 0 ? (
         <p className="py-2 text-sm text-faint">没有匹配「{query || FORMAT_LABEL[formatFilter]}」的文件。</p>
       ) : view === "grid" ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] items-start gap-x-5 gap-y-7">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] items-start gap-x-4 gap-y-6">
           {shelfBooks.map((b) => (
             <div key={b.bookId} className="flex flex-col">
               <BookCover fill path={b.coverPath} title={b.title} />
