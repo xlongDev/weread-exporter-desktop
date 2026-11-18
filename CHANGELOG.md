@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- **书库/任务封面从未真正显示过的根因修复**：asset 协议作用域 `$APPDATA/**` 解析到带 identifier 的目录（`com.weread.exporter.desktop`），而封面实际存放在应用自建数据目录（`weread-exporter/covers/`）——作用域永不匹配导致封面请求 403、永远回退占位符。现补充 `$DATA/weread-exporter/**`，封面真正可见。
 - **书库封面自动修复**：书籍记录的封面文件缺失时（偶发的下载失败会留下空路径），自动从随书数据根的 `cover.jpg` 恢复并回写记录——任务行与书库行同时痊愈。
 - **默认导出文件名去掉「（双字体精排）」后缀**：EPUB / PDF 现在直接命名为 `{书名}.epub` / `{书名}.pdf`；自定义模板不受影响。
 

@@ -28,7 +28,8 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$APPDATA/**"
+          "$APPDATA/**",
+          "$DATA/weread-exporter/**"
         ]
       }
     }
