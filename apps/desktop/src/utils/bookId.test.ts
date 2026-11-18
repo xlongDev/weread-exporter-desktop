@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractBookId, looksLikeBookId } from "./bookId";
+import { extractBookId, extractBookIds, looksLikeBookId } from "./bookId";
 
 // 与 engine/tests/test_engine_functions.py 的用例保持对齐（docs/11 §3）
 describe("extractBookId（与引擎 extract_book_id 规则对齐）", () => {
@@ -42,5 +42,26 @@ describe("looksLikeBookId（与 Rust 端 valid_book_id 对齐）", () => {
     expect(looksLikeBookId("abc 123")).toBe(false);
     expect(looksLikeBookId("中文ID测试")).toBe(false);
     expect(looksLikeBookId("abc/123")).toBe(false);
+  });
+});
+
+describe("extractBookIds（批量多本提取）", () => {
+  it("多行多链接去重保序", () => {
+    const text = "https://weread.qq.com/web/reader/aaa111\nbbb222\nhttps://weread.qq.com/web/reader/aaa111";
+    expect(extractBookIds(text)).toEqual(["aaa111", "bbb222"]);
+  });
+
+  it("逗号/中文分号/顿号分隔", () => {
+    expect(extractBookIds("ccc333，ddd444;eee555、fff666")).toEqual(["ccc333", "ddd444", "eee555", "fff666"]);
+  });
+
+  it("无有效 ID 返回空数组", () => {
+    expect(extractBookIds("随便一段文字\n没有链接")).toEqual([]);
+    expect(extractBookIds("")).toEqual([]);
+  });
+
+  it("单链接结果与 extractBookId 一致", () => {
+    const url = "https://weread.qq.com/web/reader/abc12345";
+    expect(extractBookIds(url)).toEqual([extractBookId(url)]);
   });
 });

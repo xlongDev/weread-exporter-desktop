@@ -8,7 +8,7 @@ import { useNav } from "../../stores/nav";
 import { useSettings } from "../../stores/settings";
 import { useTasks } from "../../stores/tasks";
 import { useAuth } from "../../stores/auth";
-import { extractBookId, looksLikeBookId } from "../../utils/bookId";
+import { extractBookId, extractBookIds, looksLikeBookId } from "../../utils/bookId";
 import { groupFiles, type ShelfBook } from "../../utils/shelf";
 import type { BookMeta, BookValidation, ExportFormat } from "../../types";
 import { Button } from "../../components/Button";
@@ -22,6 +22,44 @@ const FORMATS: { key: ExportFormat; name: string; hint: string }[] = [
   { key: "epub", name: "EPUB", hint: "适合 Apple Books / Kindle" },
   { key: "markdown", name: "Markdown", hint: "适合 Obsidian / Notion" },
 ];
+
+/** 发起 book_info op 并等待终态 book.validation（120s 超时兜底 worker 崩溃；ok=false 也返回，由调用方处置） */
+function fetchBookViaOp(bookId: string): Promise<{ meta: BookMeta; validation: BookValidation }> {
+  return new Promise((resolve, reject) => {
+    let opId: string | null = null;
+    let meta: BookMeta | null = null;
+    let un: UnlistenFn | null = null;
+    let settled = false;
+    const finish = (err: string | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      un?.();
+      if (err) reject(new Error(err));
+      else resolve({ meta: meta as BookMeta, validation: validation as BookValidation });
+    };
+    let validation: BookValidation | null = null;
+    const timer = window.setTimeout(() => finish("获取超时（120 秒），请重试"), 120000);
+    void listen("engine://event", (event) => {
+      const ev = event.payload as { event?: string; task_id?: string; data?: Record<string, unknown> };
+      if (!ev?.event || !ev.task_id || ev.task_id !== opId) return;
+      if (ev.event === "book.metadata") meta = ev.data as unknown as BookMeta;
+      else if (ev.event === "book.validation") {
+        validation = ev.data as unknown as BookValidation;
+        finish(null);
+      }
+    }).then((fn) => {
+      if (settled) fn();
+      else un = fn;
+    });
+    api
+      .startOp("book_info", { book_id: bookId })
+      .then((id) => {
+        opId = id;
+      })
+      .catch((e) => finish(toAppError(e).userMessage));
+  });
+}
 
 /** 导出书籍：单页流程 —— 粘贴链接 → 获取 → 开始导出（默认全格式、默认目录） */
 export function Export() {
@@ -111,15 +149,63 @@ export function Export() {
     }
   }
 
+  // ---- 批量：输入含多个 ID 时逐本获取→导入→建任务（浏览器实例天然串行，队列自动排队） ----
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const [batchSummary, setBatchSummary] = useState<{ ok: boolean; text: string }[] | null>(null);
+
+  async function runBatch(ids: string[]) {
+    setPhase("parsing");
+    setError(null);
+    setBatchSummary(null);
+    setBatchProgress({ done: 0, total: ids.length });
+    const lines: { ok: boolean; text: string }[] = [];
+    let aborted = false;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      try {
+        const { meta: m, validation: v } = await fetchBookViaOp(id);
+        if (v.logged_in === false) {
+          lines.push({ ok: false, text: "登录已失效，本条及后续书籍未处理：请重新登录后重试" });
+          aborted = true;
+          break;
+        }
+        if (!v.ok) {
+          lines.push({ ok: false, text: `${id} 未入队——${v.user_message || "书籍不可用"}` });
+          continue;
+        }
+        await api.importBook({ bookId: m.book_id, title: m.title, author: m.author, intro: m.intro, coverPath: m.cover_path });
+        for (const fmt of formats) await api.createTask(m.book_id, fmt, outputDir || undefined);
+        lines.push({ ok: true, text: `《${m.title}》已入队（${formats.map((f) => FORMATS.find((x) => x.key === f)?.name).join("+")}）` });
+      } catch (e) {
+        lines.push({ ok: false, text: `${id} 未入队——${toAppError(e).userMessage}` });
+      } finally {
+        setBatchProgress({ done: i + 1, total: ids.length });
+      }
+    }
+    await useTasks.getState().load();
+    loadRecent();
+    setBatchSummary(lines);
+    setBatchProgress(null);
+    setPhase("idle");
+    // 复位表单（格式与输出目录保持不变）；未登录中止时保留输入便于重试
+    if (!aborted) setRaw("");
+  }
+
+  function dispatchParse(input: string) {
+    const ids = extractBookIds(input);
+    if (ids.length > 1) void runBatch(ids);
+    else void parseWithId(input);
+  }
+
   async function parse() {
-    await parseWithId(raw);
+    dispatchParse(raw);
   }
 
   async function pasteAndFetch() {
     try {
       const text = (await readText()).trim();
       setRaw(text);
-      await parseWithId(text);
+      dispatchParse(text);
     } catch (e) {
       setPhase("error");
       setError("无法读取剪贴板：" + toAppError(e).userMessage);
@@ -182,6 +268,7 @@ export function Export() {
   }
 
   const canExport = imported && formats.length > 0 && !!outputDir;
+  const batchCount = extractBookIds(raw).length;
 
   const authHint = auth.waiting
     ? "已在弹出浏览器中打开微信读书登录页，请使用微信扫码（300 秒内完成）。"
@@ -236,7 +323,7 @@ export function Export() {
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void parse()}
-            placeholder="粘贴微信读书书籍链接或 ID"
+            placeholder="粘贴书籍链接或 ID（多本可换行批量导出）"
             spellCheck={false}
             className="input-glass h-11 flex-1 rounded-full px-5 text-[15px] text-ink placeholder:text-faint"
             aria-label="微信读书书籍链接或 ID"
@@ -245,10 +332,25 @@ export function Export() {
             粘贴并获取
           </Button>
           <Button size="lg" variant="primary" disabled={phase === "parsing" || !raw.trim()} onClick={() => void parse()}>
-            {phase === "parsing" ? "获取中…" : "获取书籍"}
+            {phase === "parsing"
+              ? batchProgress
+                ? `获取中 ${batchProgress.done}/${batchProgress.total}`
+                : "获取中…"
+              : batchCount > 1
+                ? `获取 ${batchCount} 本`
+                : "获取书籍"}
           </Button>
         </div>
         {error && <p className="text-sm text-negative-text">{error}</p>}
+        {batchSummary && (
+          <ul className="flex flex-col gap-1 text-sm">
+            {batchSummary.map((l, i) => (
+              <li key={i} className={l.ok ? "text-muted" : "text-negative-text"}>
+                {l.text}
+              </li>
+            ))}
+          </ul>
+        )}
         {phase === "parsing" && (
           <p className="text-sm text-faint">正在通过引擎获取书籍信息（需要启动浏览器，约数秒）…</p>
         )}
