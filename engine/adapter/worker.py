@@ -206,7 +206,7 @@ class Worker:
                     await ctx.close()
         except Exception as e:
             self.log("auth_check exception: " + repr(e))
-            error = str(e)
+            error = "无法读取登录状态，请检查网络后重试"
         data = {"logged_in": logged_in}
         if error:
             data["error"] = error
@@ -249,7 +249,7 @@ class Worker:
                     await ctx.close()
         except Exception as e:
             self.log("login exception: " + repr(e))
-            self.emit("auth.status", {"logged_in": False, "error": str(e)}, task_id)
+            self.emit("auth.status", {"logged_in": False, "error": "登录过程出现异常，请重试"}, task_id)
 
     # ---- 书籍元数据（含封面下载与可访问性校验）----
     async def book_info(self, task_id, params):
@@ -301,7 +301,7 @@ class Worker:
             }, task_id)
         except Exception as e:
             self.log("book_info exception: " + repr(e))
-            self.emit("book.validation", {"ok": False, "reason": "error", "user_message": f"获取书籍信息失败：{e}"}, task_id)
+            self.emit("book.validation", {"ok": False, "reason": "error", "user_message": "获取书籍信息失败，请稍后重试；若反复失败，请在设置页「复制诊断信息」反馈"}, task_id)
 
 
 async def amain():
