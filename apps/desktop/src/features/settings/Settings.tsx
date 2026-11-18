@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -32,6 +32,7 @@ export function Settings() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus>({ status: "idle" });
   const [namingDraft, setNamingDraft] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void load();
@@ -123,6 +124,20 @@ export function Settings() {
   const themeMode = (settings?.["general.theme"] as ThemeMode) ?? "system";
   const outputDir = (settings?.["general.output_dir"] as string) ?? paths?.default_output_dir ?? "";
 
+  // 文件名实时预览：示例书渲染，与引擎 build_base_name 同规则（留空 = 直接用书名）
+  const todayTag = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const previewBase = (() => {
+    const tmpl = namingDraft.trim();
+    const name = tmpl
+      ? tmpl
+          .replace("{书名}", "华丽人生")
+          .replace("{作者}", "伊坂幸太郎")
+          .replace("{格式}", "PDF")
+          .replace("{日期}", todayTag)
+      : "华丽人生";
+    return name.replace(/[<>:"/\\|?*]/g, "_").trim() || "华丽人生";
+  })();
+
   return (
     <div className="flex min-h-full flex-col gap-6">
       <div className="flex flex-col gap-1.5">
@@ -172,21 +187,35 @@ export function Settings() {
             {saved === "output_dir" && <SavedStamp />}
           </FieldRow>
           <FieldRow label="文件名模板">
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
               <input
+                ref={nameInputRef}
                 value={namingDraft}
                 onChange={(e) => setNamingDraft(e.target.value)}
                 onBlur={() => void saveNaming()}
                 onKeyDown={(e) => e.key === "Enter" && void saveNaming()}
-                placeholder="留空使用默认命名"
+                placeholder="留空则直接使用书名"
                 spellCheck={false}
                 className="input-glass h-9 w-full rounded-full px-3.5 text-sm outline-none placeholder:text-faint"
                 aria-label="导出文件名模板"
               />
-              <p className="text-xs text-faint">
-                可用占位符：<code className="tnum">{"{书名}"} {"{作者}"} {"{格式}"} {"{日期}"}</code>
-                ；失焦或回车保存，例：<code className="tnum">{"{书名}"}-{"{作者}"}</code>
-              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-faint">点击插入</span>
+                {NAME_PLACEHOLDERS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => insertPlaceholder(p)}
+                    className="tnum rounded-full border border-line bg-[var(--well)] px-2 py-0.5 text-xs text-muted transition-colors hover:border-[var(--control)] hover:text-ink"
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 rounded-[12px] bg-[var(--well)] px-3 py-2">
+                <span className="flex-none text-xs text-faint">预览</span>
+                <span className="tnum min-w-0 flex-1 truncate text-sm text-ink">{previewBase}.pdf</span>
+                <span className="flex-none text-[11px] text-faint">示例</span>
+              </div>
             </div>
             {saved === "naming" && <SavedStamp />}
           </FieldRow>
@@ -290,6 +319,19 @@ export function Settings() {
     if (namingDraft.trim() === savedValue.trim()) return;
     await write("export.naming", namingDraft.trim(), "naming");
   }
+
+  // 占位符一键插入到光标处
+  function insertPlaceholder(placeholder: string) {
+    const input = nameInputRef.current;
+    const start = input?.selectionStart ?? namingDraft.length;
+    const end = input?.selectionEnd ?? start;
+    const next = namingDraft.slice(0, start) + placeholder + namingDraft.slice(end);
+    setNamingDraft(next);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(start + placeholder.length, start + placeholder.length);
+    });
+  }
 }
 
 function SavedStamp() {
@@ -301,6 +343,8 @@ const THEME_OPTIONS: { key: ThemeMode; label: string; icon: typeof Monitor }[] =
   { key: "light", label: "浅色", icon: Sun },
   { key: "dark", label: "深色", icon: Moon },
 ];
+
+const NAME_PLACEHOLDERS = ["{书名}", "{作者}", "{格式}", "{日期}"];
 
 /** 三档主题切换器：横向分段 + 滑块 320ms 弹性滑动（iOS 分段控件风格） */
 function ThemeSwitcher({
