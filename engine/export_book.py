@@ -206,7 +206,33 @@ def build_markdown_files(book_id, title, author, texts, output_dir=None, progres
     return outputs
 
 
-def build_epub(book_id, root, title, author, texts, output_dir=None, progress=None, filename_template=None):
+# 排版预设：PDF 页边距（@page margin）。键来自设置 export.page_margin；None/未知键 = 历史默认。
+PAGE_MARGINS = {
+    "narrow": "12mm 12mm 12mm 12mm",
+    "standard": "20mm 16.5mm 19mm 16.5mm",
+    "wide": "28mm 24mm 26mm 24mm",
+}
+
+
+def _layout_font_pt(layout):
+    """排版字号（pt）或 None（默认）。非法/越界值静默忽略。"""
+    v = (layout or {}).get("font_size")
+    try:
+        f = float(v)
+        return f if 8 <= f <= 24 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _layout_page_margin(layout):
+    """PDF 页边距串（"20mm 16.5mm 19mm 16.5mm" 形态）或 None（历史默认）。"""
+    key = (layout or {}).get("page_margin")
+    if key and key in PAGE_MARGINS:
+        return PAGE_MARGINS[key]
+    return None
+
+
+def build_epub(book_id, root, title, author, texts, output_dir=None, progress=None, filename_template=None, layout=None):
     try:
         import markdown
         from ebooklib import epub
@@ -235,6 +261,9 @@ def build_epub(book_id, root, title, author, texts, output_dir=None, progress=No
     p.fang { font-family: "Kaiti SC", "KaiTi", "STKaiti", "楷体", serif; font-weight: bold; text-indent: 0; margin: 0.45em 0 0.45em 1.2em; }
     img { max-width: 100%; height: auto; display: block; margin: 1em auto; text-indent: 0; }
     """
+    fs = _layout_font_pt(layout)
+    if fs:
+        css_text = css_text.replace("font-size: 1em;", f"font-size: {fs}pt;", 1)
     style = epub.EpubItem(uid="style", file_name="style/main.css", media_type="text/css", content=css_text.encode("utf-8"))
     book.add_item(style)
 
@@ -334,48 +363,18 @@ async def launch_browser_headless(p):
     raise RuntimeError("未检测到可用浏览器渲染 PDF，请安装 Google Chrome 或 Microsoft Edge")
 
 
-async def build_pdf(book_id, root, title, author, intro, texts, output_dir=None, progress=None, filename_template=None):
-    img_dir = os.path.join(root, "images")
-    cover_path = os.path.join(root, "cover.jpg")
-    cover_uri = img_to_data_uri(cover_path)
-
-    toc_items, chap_htmls = [], []
-    for i, text in enumerate(texts, 1):
-        text = refine_chapter_text(text)
-        first = text.split("\n", 1)[0]
-        ch_title = re.sub(r"^#\s*", "", first).strip() or f"第{i}节"
-        body_md = text.split("\n", 1)[1] if "\n" in text else ""
-        body_html = md_to_html_simple(body_md, img_dir)
-        toc_items.append(
-            f'<li><a href="#chap-{i}">'
-            f'<span class="toc-num">{i:02d}</span>'
-            f'<span class="toc-title">{ch_title}</span>'
-            f'</a></li>'
-        )
-        chap_htmls.append(
-            f'<section class="chapter" id="chap-{i}">'
-            f'<div class="chap-header">'
-            f'<div class="chap-idx">SECTION {i:02d}</div>'
-            f'<h1>{ch_title}</h1>'
-            f'<div class="chap-rule"></div>'
-            f'</div>\n{body_html}</section>'
-        )
-
-    cover_img_tag = f'<img class="cover-img" src="{cover_uri}" alt="封面"/>' if cover_uri else ""
-    intro_html = "".join(f"<p>{p.strip()}</p>" for p in intro.split("\n") if p.strip())
-
-    # 跨平台字体加载（Mac/Windows/Linux 全局兼容字体栈）
-    html = f"""<!DOCTYPE html>
-<html lang="zh-CN">
+def _pdf_html(title, author, intro_html, toc_items, chap_htmls, cover_img_tag, page_margin, body_font_size):
+    """PDF 页面 HTML 组装（纯字符串，排版参数可测）。跨平台字体栈 Mac/Windows/Linux 全局兼容。"""
+    return f"""<!DOCTYPE html>="zh-CN">
 <head>
 <meta charset="utf-8"/>
 <title>{title}</title>
 <style>
-@page {{ size: A4; margin: 20mm 16.5mm 19mm 16.5mm; }}
+@page {{ size: A4; margin: {page_margin}; }}
 * {{ box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
 body {{
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
-    font-size: 13.2pt; line-height: 1.95; letter-spacing: 0.018em; color: #24272b; margin: 0; padding: 0;
+    font-size: {body_font_size}; line-height: 1.95; letter-spacing: 0.018em; color: #24272b; margin: 0; padding: 0;
 }}
 .cover-page {{
     page-break-after: always; text-align: center; padding: 12mm 10mm 8mm 10mm;
@@ -442,6 +441,43 @@ p.yw {{
 </body>
 </html>"""
 
+
+async def build_pdf(book_id, root, title, author, intro, texts, output_dir=None, progress=None, filename_template=None, layout=None):
+    img_dir = os.path.join(root, "images")
+    cover_path = os.path.join(root, "cover.jpg")
+    cover_uri = img_to_data_uri(cover_path)
+
+    toc_items, chap_htmls = [], []
+    for i, text in enumerate(texts, 1):
+        text = refine_chapter_text(text)
+        first = text.split("\n", 1)[0]
+        ch_title = re.sub(r"^#\s*", "", first).strip() or f"第{i}节"
+        body_md = text.split("\n", 1)[1] if "\n" in text else ""
+        body_html = md_to_html_simple(body_md, img_dir)
+        toc_items.append(
+            f'<li><a href="#chap-{i}">'
+            f'<span class="toc-num">{i:02d}</span>'
+            f'<span class="toc-title">{ch_title}</span>'
+            f'</a></li>'
+        )
+        chap_htmls.append(
+            f'<section class="chapter" id="chap-{i}">'
+            f'<div class="chap-header">'
+            f'<div class="chap-idx">SECTION {i:02d}</div>'
+            f'<h1>{ch_title}</h1>'
+            f'<div class="chap-rule"></div>'
+            f'</div>\n{body_html}</section>'
+        )
+
+    cover_img_tag = f'<img class="cover-img" src="{cover_uri}" alt="封面"/>' if cover_uri else ""
+    intro_html = "".join(f"<p>{p.strip()}</p>" for p in intro.split("\n") if p.strip())
+
+    page_margin = _layout_page_margin(layout) or "20mm 16.5mm 19mm 16.5mm"
+    body_fs = _layout_font_pt(layout)
+    body_font_size = f"{body_fs}pt" if body_fs else "13.2pt"
+    # 跨平台字体加载（Mac/Windows/Linux 全局兼容字体栈）
+    html = _pdf_html(title, author, intro_html, toc_items, chap_htmls, cover_img_tag, page_margin, body_font_size)
+
     safe = re.sub(r'[<>:"/\\|?*]', "_", title) or book_id
     out_root = output_dir if output_dir else os.path.join(BASE, "output")
     html_path = os.path.join(out_root, f"_temp_{book_id}.html")
@@ -458,6 +494,8 @@ p.yw {{
         browser = await launch_browser_headless(p)
         page = await browser.new_page()
         file_url = "file:///" + os.path.abspath(html_path).replace("\\", "/")
+        parts = page_margin.split()
+        pdf_margin = {"top": parts[0], "right": parts[1], "bottom": parts[2], "left": parts[3]}
         await page.goto(file_url, wait_until="networkidle", timeout=60000)
         await page.evaluate("() => document.fonts.ready")
         await page.pdf(
@@ -467,7 +505,7 @@ p.yw {{
             display_header_footer=True,
             header_template=header_tmpl,
             footer_template=footer_tmpl,
-            margin={"top": "20mm", "bottom": "19mm", "left": "16.5mm", "right": "16.5mm"},
+            margin=pdf_margin,
             tagged=True,
             outline=True,
         )
@@ -481,13 +519,14 @@ p.yw {{
     return pdf_path
 
 
-async def main(book_id_or_url, output_dir=None, formats=None, progress=None, filename_template=None):
+async def main(book_id_or_url, output_dir=None, formats=None, progress=None, filename_template=None, layout=None):
     """多格式导出入口。
 
     output_dir: 输出根目录覆盖（None = BASE/output）。
     formats: 要生成的格式列表（'markdown' | 'epub' | 'pdf'，None = 全部）。
     progress: 可选回调（kind: stage/output）。返回产物文件路径列表（失败返回 []）。
     filename_template: 可选文件名模板（占位符 {书名} {作者} {格式} {日期}；None/空 = 默认命名）。
+    layout: 可选排版参数 {"font_size": pt, "page_margin": 预设键}；None = 历史默认排版。
     """
     def _emit(payload):
         if progress:
@@ -533,12 +572,12 @@ async def main(book_id_or_url, output_dir=None, formats=None, progress=None, fil
         ))
     if "epub" in wanted:
         _emit({"kind": "stage", "stage": "render", "format": "epub"})
-        p = build_epub(book_id, root, title, author, texts, output_dir=output_dir, progress=_emit, filename_template=filename_template)
+        p = build_epub(book_id, root, title, author, texts, output_dir=output_dir, progress=_emit, filename_template=filename_template, layout=layout)
         if p:
             outputs.append(p)
     if "pdf" in wanted:
         _emit({"kind": "stage", "stage": "render", "format": "pdf"})
-        p = await build_pdf(book_id, root, title, author, intro, texts, output_dir=output_dir, progress=_emit, filename_template=filename_template)
+        p = await build_pdf(book_id, root, title, author, intro, texts, output_dir=output_dir, progress=_emit, filename_template=filename_template, layout=layout)
         if p:
             outputs.append(p)
     print(f"\n🎉 电子书已生成完毕，保存在: {output_dir if output_dir else os.path.join(BASE, 'output')}\n")

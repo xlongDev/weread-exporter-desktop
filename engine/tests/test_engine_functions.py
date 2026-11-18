@@ -343,3 +343,75 @@ def test_fetch_shelf_http_network_error_returns_none(monkeypatch, capsys):
     monkeypatch.setattr(crawl_weread.urllib.request, "urlopen", boom)
     assert crawl_weread.fetch_shelf_http([]) is None
     assert "书架获取失败" in capsys.readouterr().out
+
+
+# ---------- 排版参数（layout：字号/页边距） ----------
+
+def test_layout_font_pt_validates_range():
+    assert export_book._layout_font_pt({"font_size": "15"}) == 15.0
+    assert export_book._layout_font_pt({"font_size": 12}) == 12.0
+    assert export_book._layout_font_pt({"font_size": "default"}) is None
+    assert export_book._layout_font_pt({"font_size": "abc"}) is None
+    assert export_book._layout_font_pt({"font_size": 99}) is None  # 越界忽略
+    assert export_book._layout_font_pt(None) is None
+
+
+def test_layout_page_margin_presets():
+    assert export_book._layout_page_margin({"page_margin": "narrow"}) == "12mm 12mm 12mm 12mm"
+    assert export_book._layout_page_margin({"page_margin": "wide"}) == "28mm 24mm 26mm 24mm"
+    assert export_book._layout_page_margin({"page_margin": "default"}) is None
+    assert export_book._layout_page_margin({"page_margin": "bad-key"}) is None
+    assert export_book._layout_page_margin(None) is None
+
+
+def test_build_epub_applies_font_size(tmp_path):
+    import ebooklib  # 依赖已在 requirements；缺失则本测试跳过
+    p = export_book.build_epub(
+        "testbook01", str(tmp_path), "测试书", "作者", ["# 章节\n正文"],
+        output_dir=str(tmp_path), layout={"font_size": "15"},
+    )
+    if p is None:
+        pytest.skip("EbookLib 未安装")
+    import zipfile
+    with zipfile.ZipFile(p) as z:
+        css = next(n for n in z.namelist() if n.endswith("main.css"))
+        text = z.read(css).decode("utf-8")
+    assert "font-size: 15.0pt;" in text or "font-size: 15pt;" in text
+    assert "font-size: 1em;" not in text
+
+
+def test_build_epub_default_layout_untouched(tmp_path):
+    p = export_book.build_epub(
+        "testbook01", str(tmp_path), "测试书", "作者", ["# 章节\n正文"],
+        output_dir=str(tmp_path), layout=None,
+    )
+    if p is None:
+        pytest.skip("EbookLib 未安装")
+    import zipfile
+    with zipfile.ZipFile(p) as z:
+        css = next(n for n in z.namelist() if n.endswith("main.css"))
+        text = z.read(css).decode("utf-8")
+    assert "font-size: 1em;" in text
+
+
+def test_pdf_html_applies_layout():
+    html = export_book._pdf_html("测试书", "作者", "<p>简介</p>", [], [], "", "12mm 12mm 12mm 12mm", "15pt")
+    assert "margin: 12mm 12mm 12mm 12mm" in html
+    assert "font-size: 15pt" in html
+    assert "font-size: 13.2pt" not in html
+
+
+def test_pdf_html_default_layout():
+    html = export_book._pdf_html("测试书", "作者", "", [], [], "", "20mm 16.5mm 19mm 16.5mm", "13.2pt")
+    assert "margin: 20mm 16.5mm 19mm 16.5mm" in html
+    assert "font-size: 13.2pt" in html
+
+
+def test_pdf_html_renders_chapters_and_cover():
+    toc = ['<li><a href="#chap-1"><span class="toc-num">01</span><span class="toc-title">第一章</span></a></li>']
+    chap = ['<section class="chapter" id="chap-1"><h1>第一章</h1></section>']
+    html = export_book._pdf_html("测试书", "作者", "", toc, chap, '<img class="cover-img" src="data:x"/>', "20mm 16.5mm 19mm 16.5mm", "13.2pt")
+    assert "目 录" in html and "#chap-1" in html
+    assert 'class="chapter" id="chap-1"' in html
+    assert "cover-img" in html
+    assert '<div class="cover-author">作者 著</div>' in html

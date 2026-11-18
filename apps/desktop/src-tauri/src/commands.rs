@@ -19,6 +19,8 @@ const SETTING_KEYS: &[&str] = &[
     "export.naming",
     "export.overwrite",
     "export.save_cover",
+    "export.font_size",
+    "export.page_margin",
 ];
 
 const FORMATS: &[&str] = &["pdf", "epub", "markdown", "notes"];
@@ -192,16 +194,36 @@ pub fn create_task(
     };
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建输出目录失败: {e}"))?;
 
-    // 文件名模板（export.naming，空 = 引擎默认命名）：随任务参数传给引擎
+    // 文件名模板（export.naming，空 = 引擎默认命名）与排版参数（字号/页边距，
+    // 值为 "default" 或空串 = 引擎默认排版）：随任务参数传给引擎
     let mut options = serde_json::json!({});
     {
         let conn = state.db.lock().map_err(lock_err)?;
-        let tmpl = read_settings(&conn)?
+        let settings = read_settings(&conn)?;
+        let tmpl = settings
             .get("export.naming")
             .and_then(|v| v.as_str().map(|s| s.trim().to_string()))
             .unwrap_or_default();
         if !tmpl.is_empty() {
             options["filename_template"] = Value::String(tmpl);
+        }
+        let font_size = settings
+            .get("export.font_size")
+            .and_then(|v| v.as_str())
+            .unwrap_or("default");
+        let page_margin = settings
+            .get("export.page_margin")
+            .and_then(|v| v.as_str())
+            .unwrap_or("default");
+        if font_size != "default" || page_margin != "default" {
+            let mut layout = serde_json::json!({});
+            if font_size != "default" {
+                layout["font_size"] = Value::String(font_size.to_string());
+            }
+            if page_margin != "default" {
+                layout["page_margin"] = Value::String(page_margin.to_string());
+            }
+            options["layout"] = layout;
         }
     }
 

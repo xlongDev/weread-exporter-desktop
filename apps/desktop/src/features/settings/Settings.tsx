@@ -21,6 +21,19 @@ type UpdateStatus =
   | { status: "available"; tag: string; url: string }
   | { status: "error" };
 
+// 排版选项（key 存设置表；"default" = 引擎内置排版，engine/export_book.py 同一套预设）
+const FONT_SIZE_OPTIONS = [
+  { key: "12", label: "小 12" },
+  { key: "default", label: "标准" },
+  { key: "15", label: "大 15" },
+  { key: "17", label: "特大 17" },
+];
+const PAGE_MARGIN_OPTIONS = [
+  { key: "narrow", label: "窄" },
+  { key: "default", label: "标准" },
+  { key: "wide", label: "宽" },
+];
+
 /** 设置：玻璃卡片模块化网格——每区一张卡，字段纵向堆叠（docs/09 §4） */
 export function Settings() {
   const { settings, loadError, load, set } = useSettings();
@@ -123,6 +136,8 @@ export function Settings() {
 
   const themeMode = (settings?.["general.theme"] as ThemeMode) ?? "system";
   const outputDir = (settings?.["general.output_dir"] as string) ?? paths?.default_output_dir ?? "";
+  const fontSize = (settings?.["export.font_size"] as string) || "default";
+  const pageMargin = (settings?.["export.page_margin"] as string) || "default";
 
   // 文件名实时预览：示例书渲染，与引擎 build_base_name 同规则（留空 = 直接用书名）
   const todayTag = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -174,7 +189,7 @@ export function Settings() {
 
         <SettingsCard
           title="导出"
-          description="默认保存位置与命名规则，导出前也可以临时更改。"
+          description="默认保存位置、命名规则与正文排版，导出新任务时应用。"
         >
           <FieldRow label="默认导出目录">
             <span
@@ -219,6 +234,27 @@ export function Settings() {
             </div>
             {saved === "naming" && <SavedStamp />}
           </FieldRow>
+          <FieldRow label="正文字号">
+            <SegmentedControl
+              label="正文字号"
+              value={fontSize}
+              options={FONT_SIZE_OPTIONS}
+              onChange={(v) => void write("export.font_size", v, "font_size")}
+            />
+            {saved === "font_size" && <SavedStamp />}
+          </FieldRow>
+          <FieldRow label="PDF 页边距">
+            <SegmentedControl
+              label="PDF 页边距"
+              value={pageMargin}
+              options={PAGE_MARGIN_OPTIONS}
+              onChange={(v) => void write("export.page_margin", v, "page_margin")}
+            />
+            {saved === "page_margin" && <SavedStamp />}
+          </FieldRow>
+          <p className="text-xs text-faint">
+            字号对 PDF 与 EPUB 正文生效，页边距仅 PDF；标准 = 内置排版，导出新任务时应用。
+          </p>
         </SettingsCard>
 
         <SettingsCard
@@ -423,6 +459,54 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
       <span className="w-24 flex-none text-[13px] font-medium text-ink">{label}</span>
       {children}
+    </div>
+  );
+}
+
+/** 分段单选（ThemeSwitcher 的无图标泛化）：N 档滑块 + 320ms 滑动 */
+function SegmentedControl({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { key: string; label: string }[];
+  onChange: (key: string) => void;
+}) {
+  const index = Math.max(0, options.findIndex((o) => o.key === value));
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="relative grid min-w-0 flex-1 max-w-[480px] rounded-full bg-raised p-1"
+      style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
+    >
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-1 left-1 rounded-full border border-line bg-surface shadow-[0_2px_10px_rgba(0,0,0,0.18)] [transition:transform_320ms_cubic-bezier(0.32,0.72,0,1)]"
+        style={{
+          width: `calc((100% - 8px) / ${options.length})`,
+          transform: `translateX(${index * 100}%)`,
+        }}
+      />
+      {options.map(({ key, label: l }) => {
+        const selected = value === key;
+        return (
+          <button
+            key={key}
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(key)}
+            className={`relative z-10 flex h-8 items-center justify-center rounded-full text-sm transition-colors duration-200 ${
+              selected ? "font-medium text-ink" : "text-muted hover:text-ink"
+            }`}
+          >
+            {l}
+          </button>
+        );
+      })}
     </div>
   );
 }

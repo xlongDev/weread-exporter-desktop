@@ -130,6 +130,7 @@ class Worker:
         force = bool(options.get("force"))
         skip_crawl = bool(options.get("skip_crawl"))
         filename_template = options.get("filename_template") or None
+        layout = options.get("layout") or None
 
         self.emit("task.started", {"book_id": book_id, "format": fmt}, task_id)
 
@@ -173,6 +174,7 @@ class Worker:
                 formats=[fmt],
                 progress=self.make_progress(task_id),
                 filename_template=filename_template,
+                layout=layout,
             )
         except Exception as e:
             self.log("export exception: " + repr(e))
