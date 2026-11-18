@@ -189,6 +189,43 @@ def test_download_cover_no_url(tmp_path):
     assert crawl_weread.download_cover(str(tmp_path), "") == ""
 
 
+class _FakeResp:
+    def __init__(self, raw):
+        self._raw = raw
+
+    def read(self):
+        return self._raw
+
+
+def test_download_cover_retries_then_succeeds(tmp_path, monkeypatch, capsys):
+    calls = []
+
+    def fake_urlopen(req, timeout=None):
+        calls.append(req.full_url)
+        if len(calls) == 1:
+            raise OSError("timed out")
+        return _FakeResp(b"x" * 800)
+
+    monkeypatch.setattr(crawl_weread.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(crawl_weread.time, "sleep", lambda _s: None)
+    got = crawl_weread.download_cover(str(tmp_path), "https://img.weread.qq.com/t6_x.jpg", force=True)
+    assert got == str(tmp_path / "cover.jpg")
+    assert len(calls) == 2, "第 1 次失败后应重试同一链接"
+    assert "封面下载失败(第1次)" in capsys.readouterr().out
+
+
+def test_download_cover_all_attempts_fail(tmp_path, monkeypatch, capsys):
+    def fake_urlopen(_req, timeout=None):
+        raise OSError("network unreachable")
+
+    monkeypatch.setattr(crawl_weread.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(crawl_weread.time, "sleep", lambda _s: None)
+    assert crawl_weread.download_cover(str(tmp_path), "https://img.weread.qq.com/t6_x.jpg", force=True) == ""
+    out = capsys.readouterr().out
+    assert out.count("封面下载失败(第") == 4, "t7 + 原始链接各 2 次"
+    assert "封面下载失败(第1次): OSError: network unreachable" in out, "失败原因须落日志"
+
+
 def test_build_epub_embeds_cover(tmp_path):
     md = pytest.importorskip("markdown")
     pytest.importorskip("ebooklib")

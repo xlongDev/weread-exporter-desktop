@@ -200,25 +200,31 @@ def download_all_images(raw_dir, img_dir):
 
 def download_cover(book_dir, cover_url, filename="cover.jpg", force=False):
     """下载书籍封面到 book_dir/filename（幂等：已有且非 force 则跳过）。
-    小图（s_/t6_ 前缀，约70x100~300px）优先换 t7 高清变体，失败回退原链接。成功返回路径，否则返回 ''。"""
+    小图（s_/t6_ 前缀，约70x100~300px）优先换 t7 高清变体，失败回退原链接；每链接重试 1 次。
+    每次失败原因落日志（偶发失败曾无迹可查）。成功返回路径，否则返回 ''。"""
     cover_path = os.path.join(book_dir, filename)
     if not force and os.path.isfile(cover_path) and os.path.getsize(cover_path) > 500:
         return cover_path
     if not cover_url:
+        print("⚠️ 封面下载跳过: cover_url 为空", flush=True)
         return ""
     t7 = re.sub(r"/(?:s|t6)_", "/t7_", str(cover_url), count=1)
     for url in dict.fromkeys([t7, str(cover_url)]):
-        try:
-            req = urllib.request.Request(url, headers={"Referer": "https://weread.qq.com/", "User-Agent": "Mozilla/5.0"})
-            raw = urllib.request.urlopen(req, timeout=15).read()
-            if len(raw) > 500:
-                with open(cover_path, "wb") as f:
-                    f.write(raw)
-                print(f"🖼️ 封面下载完成: {os.path.getsize(cover_path)} bytes", flush=True)
-                return cover_path
-        except Exception:
-            continue
-    print("⚠️ 封面下载跳过", flush=True)
+        for attempt in (1, 2):
+            try:
+                req = urllib.request.Request(url, headers={"Referer": "https://weread.qq.com/", "User-Agent": "Mozilla/5.0"})
+                raw = urllib.request.urlopen(req, timeout=15).read()
+                if len(raw) > 500:
+                    with open(cover_path, "wb") as f:
+                        f.write(raw)
+                    print(f"🖼️ 封面下载完成: {os.path.getsize(cover_path)} bytes", flush=True)
+                    return cover_path
+                print(f"⚠️ 封面响应过小({len(raw)}B): {url}", flush=True)
+            except Exception as e:
+                print(f"⚠️ 封面下载失败(第{attempt}次): {e.__class__.__name__}: {e} | {url}", flush=True)
+            if attempt == 1:
+                time.sleep(1)
+    print("⚠️ 封面下载跳过: t7 与原始链接均失败", flush=True)
     return ""
 
 
