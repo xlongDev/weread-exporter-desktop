@@ -144,8 +144,9 @@ export function Settings() {
         <SettingsCard
           title="外观"
           description="界面跟随系统，或手动选择浅色 / 深色，立即生效并记住。"
+          span
         >
-          <Field label="主题">
+          <FieldRow label="主题">
             <ThemeSwitcher
               value={themeMode}
               onChange={(mode) => {
@@ -153,27 +154,25 @@ export function Settings() {
                 void write("general.theme", mode, "theme");
               }}
             />
-          </Field>
+          </FieldRow>
         </SettingsCard>
 
         <SettingsCard
           title="导出"
           description="默认保存位置与命名规则，导出前也可以临时更改。"
         >
-          <Field label="默认导出目录">
-            <div className="flex min-w-0 items-center gap-2">
-              <span
-                className="selectable min-w-0 flex-1 truncate text-sm text-muted"
-                title={outputDir}
-              >
-                {outputDir || "—"}
-              </span>
-              <Button onClick={() => void pickOutputDir()}>选择目录…</Button>
-            </div>
+          <FieldRow label="默认导出目录">
+            <span
+              className="selectable min-w-0 flex-1 truncate text-sm text-muted"
+              title={outputDir}
+            >
+              {outputDir || "—"}
+            </span>
+            <Button onClick={() => void pickOutputDir()}>选择目录…</Button>
             {saved === "output_dir" && <SavedStamp />}
-          </Field>
-          <Field label="文件名模板">
-            <div className="flex flex-col gap-1.5">
+          </FieldRow>
+          <FieldRow label="文件名模板">
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
               <input
                 value={namingDraft}
                 onChange={(e) => setNamingDraft(e.target.value)}
@@ -190,99 +189,87 @@ export function Settings() {
               </p>
             </div>
             {saved === "naming" && <SavedStamp />}
-          </Field>
+          </FieldRow>
         </SettingsCard>
 
         <SettingsCard
           title="数据与隐私"
           description="任务记录、设置与浏览器会话均保存在本机，不会上传。"
         >
-          <Field label="数据目录">
-            <div className="flex min-w-0 items-center gap-2">
-              <span
-                className="selectable min-w-0 flex-1 truncate text-sm text-muted"
-                title={paths?.app_data}
-              >
-                {paths?.app_data ?? "—"}
-              </span>
-              <Button onClick={() => void revealDataDir()}>打开</Button>
-            </div>
-          </Field>
-          <Field label="登录会话">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm text-muted">
-                登录态保存在本机浏览器配置目录，可随时清除。
-              </span>
-              {auth.status === "in" && <StatusPill tone="positive">已登录</StatusPill>}
-              {auth.status === "out" && <StatusPill tone="neutral">未登录</StatusPill>}
-              {auth.status === "checking" && <StatusPill tone="neutral">检查中…</StatusPill>}
-              <Button onClick={() => void auth.logout()}>退出登录</Button>
-            </div>
-          </Field>
+          <FieldRow label="数据目录">
+            <span
+              className="selectable min-w-0 flex-1 truncate text-sm text-muted"
+              title={paths?.app_data}
+            >
+              {paths?.app_data ?? "—"}
+            </span>
+            <Button onClick={() => void revealDataDir()}>打开</Button>
+          </FieldRow>
+          <FieldRow label="登录会话">
+            <span className="min-w-0 flex-1 truncate text-sm text-muted">
+              登录态保存在本机浏览器配置目录，可随时清除。
+            </span>
+            {auth.status === "in" && <StatusPill tone="positive">已登录</StatusPill>}
+            {auth.status === "out" && <StatusPill tone="neutral">未登录</StatusPill>}
+            {auth.status === "checking" && <StatusPill tone="neutral">检查中…</StatusPill>}
+            <Button onClick={() => void auth.logout()}>退出登录</Button>
+          </FieldRow>
         </SettingsCard>
 
-        <SettingsCard title="关于" description="版本与开源信息。">
-          <Field label="应用版本">
+        <SettingsCard title="关于" description="版本与开源信息。" span>
+          <FieldRow label="应用版本">
             <span className="tnum text-sm text-muted">{appVersion || "—"}</span>
-          </Field>
-          <Field label="检查更新">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 flex-1 text-sm text-muted">
-                {update.status === "idle" && "从 GitHub Releases 检查新版本"}
-                {update.status === "checking" && "检查中…"}
-                {update.status === "latest" && `已是最新（${appVersion}）`}
-                {update.status === "available" && `发现新版本 ${update.tag}（当前 ${appVersion}）`}
-                {update.status === "error" && "检查失败（需要能访问 GitHub），请稍后重试"}
-              </span>
-              {update.status === "idle" && (
-                <Button onClick={() => void checkUpdate()}>检查更新</Button>
-              )}
-              {update.status === "checking" && <Button disabled>检查中…</Button>}
-              {update.status === "error" && (
-                <Button onClick={() => void checkUpdate()}>重试</Button>
-              )}
-              {update.status === "available" && (
-                <>
-                  <Button onClick={() => void openUrl(update.url).catch(() => {})}>打开发布页</Button>
-                  <Button variant="ghost" onClick={() => void copyInstallCommand()}>
-                    复制安装命令
-                  </Button>
-                </>
-              )}
-            </div>
-          </Field>
-          <Field label="诊断信息">
-            <div className="flex flex-col gap-2">
-              <p className="text-sm text-muted">
-                复制版本、近期失败任务与应用日志（已脱敏），问题反馈时附上可加快定位。
-              </p>
-              <div className="flex items-center gap-2">
-                <Button onClick={() => void copyDiagnostics()}>复制诊断信息</Button>
-                {saved === "diagnostics" && <SavedStamp />}
-              </div>
-            </div>
-          </Field>
-          <Field label="导出引擎">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="tnum min-w-0 flex-1 truncate text-sm text-muted">
-                {engine.status === "ready" && `v${engine.engineVersion} · Python ${engine.pythonVersion}`}
-                {engine.status === "checking" && "检查中…"}
-                {engine.status === "unknown" && "—"}
-                {(engine.status === "error" || (engine.status === "ready" && !engine.engineVersion)) &&
-                  (engine.error ?? "引擎不可用")}
-              </span>
-              {engine.status === "ready" && <StatusPill tone="positive">就绪</StatusPill>}
-              {engine.status === "error" && (
-                <>
-                  <StatusPill tone="negative">异常</StatusPill>
-                  <Button variant="ghost" onClick={() => void engine.refresh()}>
-                    重试
-                  </Button>
-                </>
-              )}
-            </div>
-          </Field>
-          <Field label="开源许可">
+          </FieldRow>
+          <FieldRow label="检查更新">
+            <span className="min-w-0 flex-1 text-sm text-muted">
+              {update.status === "idle" && "从 GitHub Releases 检查新版本"}
+              {update.status === "checking" && "检查中…"}
+              {update.status === "latest" && `已是最新（${appVersion}）`}
+              {update.status === "available" && `发现新版本 ${update.tag}（当前 ${appVersion}）`}
+              {update.status === "error" && "检查失败（需要能访问 GitHub），请稍后重试"}
+            </span>
+            {update.status === "idle" && (
+              <Button onClick={() => void checkUpdate()}>检查更新</Button>
+            )}
+            {update.status === "checking" && <Button disabled>检查中…</Button>}
+            {update.status === "error" && (
+              <Button onClick={() => void checkUpdate()}>重试</Button>
+            )}
+            {update.status === "available" && (
+              <>
+                <Button onClick={() => void openUrl(update.url).catch(() => {})}>打开发布页</Button>
+                <Button variant="ghost" onClick={() => void copyInstallCommand()}>
+                  复制安装命令
+                </Button>
+              </>
+            )}
+          </FieldRow>
+          <FieldRow label="诊断信息">
+            <span className="min-w-0 flex-1 text-sm text-muted">
+              复制版本、近期失败任务与应用日志（已脱敏），问题反馈时附上可加快定位。
+            </span>
+            <Button onClick={() => void copyDiagnostics()}>复制诊断信息</Button>
+            {saved === "diagnostics" && <SavedStamp />}
+          </FieldRow>
+          <FieldRow label="导出引擎">
+            <span className="tnum min-w-0 flex-1 truncate text-sm text-muted">
+              {engine.status === "ready" && `v${engine.engineVersion} · Python ${engine.pythonVersion}`}
+              {engine.status === "checking" && "检查中…"}
+              {engine.status === "unknown" && "—"}
+              {(engine.status === "error" || (engine.status === "ready" && !engine.engineVersion)) &&
+                (engine.error ?? "引擎不可用")}
+            </span>
+            {engine.status === "ready" && <StatusPill tone="positive">就绪</StatusPill>}
+            {engine.status === "error" && (
+              <>
+                <StatusPill tone="negative">异常</StatusPill>
+                <Button variant="ghost" onClick={() => void engine.refresh()}>
+                  重试
+                </Button>
+              </>
+            )}
+          </FieldRow>
+          <FieldRow label="开源许可">
             <span className="text-sm text-muted">
               MIT License · 基于开源项目{" "}
               <button
@@ -292,7 +279,7 @@ export function Settings() {
                 weread-book-exporter
               </button>
             </span>
-          </Field>
+          </FieldRow>
         </SettingsCard>
       </div>
     </div>
@@ -331,7 +318,7 @@ function ThemeSwitcher({
     <div
       role="radiogroup"
       aria-label="主题"
-      className="relative grid w-full grid-cols-3 rounded-full bg-raised p-1"
+      className="relative grid min-w-0 flex-1 max-w-[480px] grid-cols-3 rounded-full bg-raised p-1"
     >
       <span
         aria-hidden="true"
@@ -359,32 +346,38 @@ function ThemeSwitcher({
   );
 }
 
-/** 玻璃卡片：设置区标题 + 描述 + 字段（半透明填充，不再嵌套 blur） */
+/** 玻璃卡片：设置区标题 + 描述 + 字段行（span = 通栏卡，宽窗口下撑满网格行） */
 function SettingsCard({
   title,
   description,
+  span = false,
   children,
 }: {
   title: string;
   description: string;
+  span?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4 rounded-[20px] border border-line bg-[var(--well)] p-5">
+    <section
+      className={`flex flex-col gap-3.5 rounded-[20px] border border-line bg-[var(--well)] p-5 ${
+        span ? "lg:col-span-2" : ""
+      }`}
+    >
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold text-ink">{title}</h2>
         <p className="text-xs leading-relaxed text-muted">{description}</p>
       </div>
-      <div className="flex flex-col gap-4">{children}</div>
+      <div className="flex flex-col gap-3.5">{children}</div>
     </section>
   );
 }
 
-/** 字段：标签在上，控件在下（窄卡片内的纵向堆叠布局） */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/** 字段行：标签居左（w-24），控件居右弹性填充 */
+function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-medium text-ink">{label}</span>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+      <span className="w-24 flex-none text-[13px] font-medium text-ink">{label}</span>
       {children}
     </div>
   );
