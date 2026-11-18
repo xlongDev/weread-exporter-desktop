@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { BookOpen, LibraryBig, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
+import { BookOpen, LibraryBig, Maximize2, Minus, PanelLeftClose, PanelLeftOpen, Settings2, X } from "lucide-react";
 import { useNav, type Page } from "../stores/nav";
 import { useAuth, type AuthStatus } from "../stores/auth";
 import { IS_WINDOWS } from "./platform";
@@ -147,27 +147,34 @@ export function Sidebar() {
 }
 
 /** 自绘 macOS 红绿灯（decorations:false）：关闭走 CloseGuard 拦截流程，绿色为最大化切换。
+ *  hover 仿原生：悬停任一圆点，三钮同时浮现深色符号（✕ − ⤢）。
  *  窗口句柄在点击时才取 —— 渲染期不依赖 Tauri internals */
 function TrafficLights() {
-  const dot =
-    "size-3 rounded-full shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.18)] transition-[filter] hover:brightness-95";
+  const glyph = "text-black/50 opacity-0 transition-opacity duration-100 group-hover:opacity-100";
+  const dot = "flex size-3 items-center justify-center rounded-full shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.18)]";
   return (
-    <div className="flex items-center gap-2">
+    <div className="group flex items-center gap-2">
       <button
         aria-label="关闭窗口"
         onClick={() => void getCurrentWindow().close()}
         className={`${dot} bg-[#ff5f57]`}
-      />
+      >
+        <X size={8} strokeWidth={3} className={glyph} aria-hidden="true" />
+      </button>
       <button
         aria-label="最小化窗口"
         onClick={() => void getCurrentWindow().minimize()}
         className={`${dot} bg-[#febc2e]`}
-      />
+      >
+        <Minus size={8} strokeWidth={3} className={glyph} aria-hidden="true" />
+      </button>
       <button
         aria-label="最大化窗口"
         onClick={() => void getCurrentWindow().toggleMaximize()}
         className={`${dot} bg-[#28c840]`}
-      />
+      >
+        <Maximize2 size={8} strokeWidth={3} className={glyph} aria-hidden="true" />
+      </button>
     </div>
   );
 }
