@@ -1,4 +1,5 @@
 """引擎核心纯函数回归（无网络、无浏览器）。"""
+import json
 import os
 
 import pytest
@@ -283,3 +284,62 @@ def test_parse_book_detail_html_fallback_cover():
     m = crawl_weread.parse_book_detail_html(html)
     assert m["cover"] == "https://c/s_1.jpg"  # og 缺失时回退 bookInfo
     assert m["intro"] == ""
+
+
+# ---------- parse_shelf_response ----------
+
+def test_parse_shelf_response_extracts_books():
+    data = {"books": [
+        {"bookId": "24019719", "title": "大侦探波洛探案全集", "author": "阿加莎·克里斯蒂",
+         "cover": "https://c/t6_24019719.jpg", "format": "epub"},
+        {"bookId": "821366", "title": " 三体 ", "author": " 刘慈欣 ", "cover": ""},
+        # 非书/缺字段条目应被跳过
+        {"bookId": "", "title": "无 ID"},
+        {"title": "无 ID 字段"},
+        {"bookId": "3300018646", "title": ""},
+    ]}
+    books = crawl_weread.parse_shelf_response(data)
+    assert [b["book_id"] for b in books] == ["24019719", "821366"]
+    assert books[0]["author"] == "阿加莎·克里斯蒂"
+    assert books[1]["title"] == "三体"  # 去首尾空白
+    assert books[1]["cover"] == ""
+
+
+def test_parse_shelf_response_empty_and_missing():
+    assert crawl_weread.parse_shelf_response({}) == []
+    assert crawl_weread.parse_shelf_response(None) == []
+
+
+# ---------- fetch_shelf_http（mock urlopen，无真实网络） ----------
+
+class _FakeJsonResp:
+    def __init__(self, body):
+        self._body = body.encode("utf-8")
+
+    def read(self):
+        return self._body
+
+
+def test_fetch_shelf_http_success(monkeypatch):
+    body = json.dumps({"books": [{"bookId": "1", "title": "书", "author": "人", "cover": ""}]})
+    monkeypatch.setattr(crawl_weread.urllib.request, "urlopen", lambda req, timeout: _FakeJsonResp(body))
+    cookies = [
+        {"name": "wr_skey", "value": "k", "domain": ".weread.qq.com"},
+        {"name": "other", "value": "x", "domain": "example.com"},  # 非 weread 域不得进 Cookie 头
+    ]
+    books = crawl_weread.fetch_shelf_http(cookies)
+    assert books == [{"book_id": "1", "title": "书", "author": "人", "cover": ""}]
+
+
+def test_fetch_shelf_http_login_expired_returns_none(monkeypatch):
+    body = json.dumps({"errCode": -2010, "errMsg": "用户不存在"})
+    monkeypatch.setattr(crawl_weread.urllib.request, "urlopen", lambda req, timeout: _FakeJsonResp(body))
+    assert crawl_weread.fetch_shelf_http([{"name": "wr_skey", "value": "k", "domain": ".weread.qq.com"}]) is None
+
+
+def test_fetch_shelf_http_network_error_returns_none(monkeypatch, capsys):
+    def boom(req, timeout):
+        raise OSError("network down")
+    monkeypatch.setattr(crawl_weread.urllib.request, "urlopen", boom)
+    assert crawl_weread.fetch_shelf_http([]) is None
+    assert "书架获取失败" in capsys.readouterr().out

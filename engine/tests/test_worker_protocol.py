@@ -198,3 +198,21 @@ def test_worker_real_markdown_export_from_existing_data():
     finally:
         if proc.poll() is None:
             proc.kill()
+
+
+def test_worker_mock_shelf_fetch():
+    proc = spawn_worker(mock=True)
+    reader = EventReader(proc)
+    try:
+        assert reader.next()["event"] == "engine.ready"
+        send(proc, {"protocol_version": 1, "cmd": "shelf_fetch", "task_id": "op-shelf"})
+        ev = reader.next()
+        assert ev["event"] == "shelf.books" and ev["task_id"] == "op-shelf"
+        assert ev["data"]["count"] == len(ev["data"]["books"]) == 3
+        assert all(b["book_id"] and b["title"] for b in ev["data"]["books"])
+
+        send(proc, {"protocol_version": 1, "cmd": "shutdown"})
+        proc.wait(timeout=10)
+    finally:
+        if proc.poll() is None:
+            proc.kill()

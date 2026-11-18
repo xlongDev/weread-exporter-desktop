@@ -1,16 +1,18 @@
 import type { ReactNode } from "react";
 
-/** 对话框：唯一允许阴影的浮层（docs/09 §1）；Esc 关闭 */
+/** 对话框：唯一允许阴影的浮层（docs/09 §1）；Esc 关闭；wide 用于书架网格等宽内容 */
 export function Dialog({
   title,
   children,
   actions,
   onClose,
+  wide,
 }: {
   title: string;
   children: ReactNode;
   actions: ReactNode;
   onClose: () => void;
+  wide?: boolean;
 }) {
   return (
     <div
@@ -23,7 +25,7 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="anim-dialog glass mx-4 w-full max-w-[440px] rounded-[24px] p-5"
+        className={`anim-dialog glass mx-4 w-full rounded-[24px] p-5 ${wide ? "max-w-[720px]" : "max-w-[440px]"}`}
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-semibold text-ink">{title}</h2>

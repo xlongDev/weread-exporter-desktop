@@ -68,6 +68,14 @@ export interface BookValidation {
   logged_in?: boolean;
 }
 
+/** 引擎 shelf.books 事件负载中的书籍卡片（微信读书书架） */
+export interface ShelfItem {
+  book_id: string;
+  title: string;
+  author: string;
+  cover: string;
+}
+
 /** 引擎 auth.status 事件负载 */
 export interface AuthStatusData {
   logged_in: boolean;

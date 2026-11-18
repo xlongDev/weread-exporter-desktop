@@ -14,6 +14,7 @@ import type { BookMeta, BookValidation, ExportFormat } from "../../types";
 import { Button } from "../../components/Button";
 import { BookCover } from "../../components/BookCover";
 import { StatusPill } from "../../components/StatusPill";
+import { ShelfPicker } from "./ShelfPicker";
 
 type ParsePhase = "idle" | "parsing" | "ready" | "error";
 
@@ -152,6 +153,7 @@ export function Export() {
   // ---- 批量：输入含多个 ID 时逐本获取→导入→建任务（浏览器实例天然串行，队列自动排队） ----
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchSummary, setBatchSummary] = useState<{ ok: boolean; text: string }[] | null>(null);
+  const [shelfOpen, setShelfOpen] = useState(false);
 
   async function runBatch(ids: string[]) {
     setPhase("parsing");
@@ -331,6 +333,9 @@ export function Export() {
           <Button size="lg" variant="secondary" disabled={phase === "parsing"} onClick={() => void pasteAndFetch()}>
             粘贴并获取
           </Button>
+          <Button size="lg" variant="secondary" disabled={phase === "parsing"} onClick={() => setShelfOpen(true)}>
+            从书架导入
+          </Button>
           <Button size="lg" variant="primary" disabled={phase === "parsing" || !raw.trim()} onClick={() => void parse()}>
             {phase === "parsing"
               ? batchProgress
@@ -483,6 +488,15 @@ export function Export() {
           )}
         </section>
       )}
+
+      <ShelfPicker
+        open={shelfOpen}
+        onClose={() => setShelfOpen(false)}
+        onConfirm={(ids) => {
+          setShelfOpen(false);
+          void runBatch(ids);
+        }}
+      />
     </div>
   );
 }

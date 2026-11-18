@@ -264,6 +264,46 @@ def fetch_book_meta_http(book_id, timeout=20):
     return parse_book_detail_html(html)
 
 
+SHELF_SYNC_URL = "https://weread.qq.com/web/shelf/sync"
+
+
+def parse_shelf_response(data):
+    """从 shelf/sync 回包提取书籍卡片（纯函数）：bookId/标题/作者/封面。
+    跳过缺 bookId 或标题的条目（文件夹/录音等非书条目天然被过滤）。"""
+    books = []
+    for b in (data or {}).get("books") or []:
+        book_id = str(b.get("bookId") or "").strip()
+        title = (b.get("title") or "").strip()
+        if not book_id or not title:
+            continue
+        books.append({
+            "book_id": book_id,
+            "title": title,
+            "author": (b.get("author") or "").strip(),
+            "cover": b.get("cover") or "",
+        })
+    return books
+
+
+def fetch_shelf_http(cookies, timeout=20):
+    """用浏览器 profile 提取的 cookie 列表调用书架同步接口（纯 HTTP，无需页面）。
+    成功返回书籍卡片列表；登录失效（errCode）或网络失败返回 None。"""
+    cookie_hdr = "; ".join(f"{c['name']}={c['value']}" for c in cookies if "weread" in c.get("domain", ""))
+    req = urllib.request.Request(SHELF_SYNC_URL, headers={
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://weread.qq.com/",
+        "Cookie": cookie_hdr,
+    })
+    try:
+        data = json.loads(urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8", "replace"))
+    except Exception as e:
+        print(f"⚠️ 书架获取失败: {e}", flush=True)
+        return None
+    if not isinstance(data, dict) or "errCode" in data:
+        return None
+    return parse_shelf_response(data)
+
+
 def refresh_meta_and_cover(book_id, book_dir):
     """用 og: 元数据刷新 book_dir/meta.json 并强制重下封面（旧数据可能串书）。
     HTTP 失败时沿用旧 meta.json 与封面文件。返回合并后的 meta dict。"""

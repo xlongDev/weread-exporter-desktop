@@ -365,6 +365,7 @@ pub fn start_op(
         "auth_check" => "auth_check",
         "login" => "login",
         "book_info" => "book_info",
+        "shelf_fetch" => "shelf_fetch",
         _ => return Err(format!("未知操作类型: {kind}")),
     };
     let op_id = format!("{kind}-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));

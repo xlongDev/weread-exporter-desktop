@@ -1,4 +1,4 @@
-import type { LibraryFile } from "../types";
+import type { LibraryFile, ShelfItem } from "../types";
 
 const FORMAT_ORDER: Record<string, number> = { pdf: 0, epub: 1, markdown: 2 };
 
@@ -26,4 +26,11 @@ export function groupFiles(files: LibraryFile[]): ShelfBook[] {
     coverPath: list.find((f) => f.cover_path)?.cover_path,
     files: [...list].sort((a, b) => (FORMAT_ORDER[a.format] ?? 9) - (FORMAT_ORDER[b.format] ?? 9)),
   }));
+}
+
+/** 微信读书书架卡片按标题/作者过滤（书架一键导入弹窗用）；空查询原序返回 */
+export function filterShelfItems(items: ShelfItem[], query: string): ShelfItem[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return items;
+  return items.filter((b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q));
 }

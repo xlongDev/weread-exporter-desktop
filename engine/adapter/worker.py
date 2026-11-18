@@ -81,6 +81,9 @@ class Worker:
         if action == "book_info":
             await self.book_info(task_id, cmd.get("params") or {})
             return
+        if action == "shelf_fetch":
+            await self.shelf_fetch(task_id)
+            return
 
         self.emit("engine.error", {"code": "UNKNOWN_CMD", "message": f"未知指令: {action}"}, task_id)
 
@@ -189,6 +192,41 @@ class Worker:
         fake_path = os.path.join(output_dir or os.path.join(ENGINE_DIR, "..", "output"), f"mock-{book_id}.{ 'epub' if fmt == 'epub' else fmt }")
         self.emit("task.output", {"format": fmt, "file_path": fake_path, "file_size": 1024}, task_id)
         self.emit("task.completed", {"outputs": [{"format": fmt, "file_path": fake_path}]}, task_id)
+
+    # ---- 书架列表（一键导入用：headless 提取 cookie → 纯 HTTP 调书架同步接口）----
+    async def shelf_fetch(self, task_id):
+        import crawl_weread
+        from playwright.async_api import async_playwright
+
+        if MOCK:
+            await asyncio.sleep(0.1)
+            self.emit("shelf.books", {"count": 3, "books": [
+                {"book_id": "mockbook123", "title": "Mock 书架书一", "author": "Mock 作者", "cover": ""},
+                {"book_id": "mockbook456", "title": "Mock 书架书二", "author": "Mock 作者", "cover": ""},
+                {"book_id": "mockbook789", "title": "Mock 书架书三", "author": "", "cover": ""},
+            ]}, task_id)
+            return
+
+        try:
+            async with async_playwright() as p:
+                ctx = await crawl_weread.launch_browser_context(p, crawl_weread.USER_DATA_DIR, headless=True)
+                try:
+                    logged_in = await crawl_weread.check_cookies_login(ctx)
+                    cookies = await ctx.cookies()
+                finally:
+                    await ctx.close()
+            if not logged_in:
+                self.emit("shelf.error", {"code": "LOGIN_REQUIRED", "user_message": "微信读书登录已失效，请先登录后再从书架导入"}, task_id)
+                return
+            books = await asyncio.to_thread(crawl_weread.fetch_shelf_http, cookies)
+            if books is None:
+                self.emit("shelf.error", {"code": "SHELF_FETCH_FAILED", "user_message": "书架获取失败，请检查网络后重试"}, task_id)
+                return
+            self.log(f"shelf fetched: {len(books)} books")
+            self.emit("shelf.books", {"count": len(books), "books": books}, task_id)
+        except Exception as e:
+            self.log("shelf_fetch exception: " + repr(e))
+            self.emit("shelf.error", {"code": "SHELF_ERROR", "user_message": "获取书架时出现异常，请稍后重试"}, task_id)
 
     # ---- 会话检查 ----
     async def auth_check(self, task_id=None):
