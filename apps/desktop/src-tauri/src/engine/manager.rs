@@ -530,7 +530,17 @@ pub fn apply_task_event(
         "task.progress" => {
             let total = ev.data["total_chapters"].as_i64();
             let done = ev.data["chapters_done"].as_i64();
-            let ratio: Option<f64> = match (total, done) {
+            // 真实引擎目录事件只带 total、翻页事件只带 done：total 缺失时回读 DB（目录事件先到，已落库）
+            let known_total = total.or_else(|| {
+                conn.query_row(
+                    "SELECT total_chapters FROM export_tasks WHERE id=?1",
+                    [task_id],
+                    |r| r.get(0),
+                )
+                .ok()
+                .flatten()
+            });
+            let ratio: Option<f64> = match (known_total, done) {
                 (Some(t), Some(d)) if t > 0 => Some((d as f64 / t as f64 * 100.0).min(99.0)),
                 _ => None,
             };
@@ -540,7 +550,8 @@ pub fn apply_task_event(
                    current_chapter = COALESCE(?3, current_chapter),
                    pages_done = COALESCE(?4, pages_done),
                    words_done = COALESCE(?5, words_done),
-                   progress = COALESCE(?6, progress),
+                   total_chapters = COALESCE(?6, total_chapters),
+                   progress = COALESCE(?7, progress),
                    updated_at = datetime('now')
                  WHERE id=?1",
                 rusqlite::params![
@@ -549,6 +560,7 @@ pub fn apply_task_event(
                     ev.data["chapter_title"].as_str(),
                     ev.data["page"].as_i64(),
                     ev.data["words"].as_i64(),
+                    total,
                     ratio,
                 ],
             )
@@ -732,6 +744,29 @@ mod tests {
             .unwrap();
         assert_eq!(files, 1);
         assert_eq!(size, 55);
+    }
+
+    #[test]
+    fn progress_moves_with_split_catalog_and_page_events() {
+        // 真实引擎事件序：目录事件只带 total（随后落库），翻页事件只带 done —— 回读拼接算进度
+        let conn = test_conn();
+        let id = seed_task(&conn);
+        let tid = id.to_string();
+        let mut outputs = Vec::new();
+
+        apply_task_event(&conn, &tid, &ev("task.started", serde_json::json!({})), &mut outputs).unwrap();
+        assert!(!apply_task_event(&conn, &tid, &ev("task.progress", serde_json::json!({"stage":"catalog","total_chapters":20})), &mut outputs).unwrap());
+        let total: Option<i64> = conn
+            .query_row("SELECT total_chapters FROM export_tasks WHERE id=?1", [id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(total, Some(20), "目录事件应落库 total_chapters");
+
+        assert!(!apply_task_event(&conn, &tid, &ev("task.progress", serde_json::json!({"stage":"crawl","page":1,"chapters_done":5,"words":800})), &mut outputs).unwrap());
+        let (progress, total): (f64, Option<i64>) = conn
+            .query_row("SELECT progress, total_chapters FROM export_tasks WHERE id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(total, Some(20), "翻页事件不得清空已落库 total");
+        assert!((progress - 25.0).abs() < 0.01, "5/20 = 25%，实测 {progress}");
     }
 
     #[test]

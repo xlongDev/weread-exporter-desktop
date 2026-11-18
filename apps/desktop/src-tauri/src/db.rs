@@ -2,7 +2,10 @@ use rusqlite::Connection;
 use std::path::Path;
 
 /// 顺序迁移：PRAGMA user_version。新增迁移时在数组尾部追加 (v, sql)。
-pub const MIGRATIONS: &[(u32, &str)] = &[(1, include_str!("../migrations/0001_init.sql"))];
+pub const MIGRATIONS: &[(u32, &str)] = &[
+    (1, include_str!("../migrations/0001_init.sql")),
+    (2, include_str!("../migrations/0002_add_total_chapters.sql")),
+];
 
 pub const MAX_BACKUPS: usize = 3;
 
@@ -153,7 +156,7 @@ mod tests {
         let mut conn = open(&path).unwrap();
         migrate(&mut conn, &path).unwrap();
         let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 1);
+        assert_eq!(v, 2);
         // 关键表存在
         for t in ["books", "export_tasks", "task_chapters", "exported_files", "settings"] {
             let n: i64 = conn
@@ -219,7 +222,7 @@ mod tests {
         migrate(&mut conn, &path).unwrap();
         migrate(&mut conn, &path).unwrap(); // 第二次应无操作且不报错
         let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 1);
+        assert_eq!(v, 2);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }

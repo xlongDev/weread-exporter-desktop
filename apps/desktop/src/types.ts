@@ -91,6 +91,7 @@ export interface TaskRow {
   pages_done: number;
   words_done: number;
   chapters_done: number;
+  total_chapters: number | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;

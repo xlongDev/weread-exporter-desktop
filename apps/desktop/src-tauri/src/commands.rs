@@ -290,6 +290,7 @@ pub struct TaskRow {
     pages_done: i64,
     words_done: i64,
     chapters_done: i64,
+    total_chapters: Option<i64>,
     created_at: String,
     started_at: Option<String>,
     finished_at: Option<String>,
@@ -308,7 +309,7 @@ pub fn list_tasks(state: State<'_, AppState>, limit: i64) -> Result<Vec<TaskRow>
                         t.progress, COALESCE(t.current_stage,''), COALESCE(t.current_chapter,''),
                         t.pages_done, t.words_done,
                         (SELECT count(*) FROM task_chapters c WHERE c.task_id=t.id AND c.status='done'),
-                        t.created_at, t.started_at, t.finished_at, t.error_code, t.error_message, t.output_dir
+                        t.created_at, t.started_at, t.finished_at, t.error_code, t.error_message, t.output_dir, t.total_chapters
                  FROM export_tasks t LEFT JOIN books b ON b.book_id = t.book_id
                  ORDER BY t.created_at DESC, t.id DESC LIMIT ?1",
             )
@@ -328,6 +329,7 @@ pub fn list_tasks(state: State<'_, AppState>, limit: i64) -> Result<Vec<TaskRow>
                     pages_done: r.get(9)?,
                     words_done: r.get(10)?,
                     chapters_done: r.get(11)?,
+                    total_chapters: r.get(18)?,
                     created_at: r.get(12)?,
                     started_at: r.get(13)?,
                     finished_at: r.get(14)?,
@@ -575,7 +577,7 @@ pub fn get_task_detail(state: State<'_, AppState>, task_id: i64) -> Result<TaskD
                     t.progress, COALESCE(t.current_stage,''), COALESCE(t.current_chapter,''),
                     t.pages_done, t.words_done,
                     (SELECT count(*) FROM task_chapters c WHERE c.task_id=t.id AND c.status='done'),
-                    t.created_at, t.started_at, t.finished_at, t.error_code, t.error_message, t.output_dir
+                    t.created_at, t.started_at, t.finished_at, t.error_code, t.error_message, t.output_dir, t.total_chapters
              FROM export_tasks t LEFT JOIN books b ON b.book_id = t.book_id WHERE t.id=?1",
             [task_id],
             |r| {
@@ -592,6 +594,7 @@ pub fn get_task_detail(state: State<'_, AppState>, task_id: i64) -> Result<TaskD
                     pages_done: r.get(9)?,
                     words_done: r.get(10)?,
                     chapters_done: r.get(11)?,
+                    total_chapters: r.get(18)?,
                     created_at: r.get(12)?,
                     started_at: r.get(13)?,
                     finished_at: r.get(14)?,

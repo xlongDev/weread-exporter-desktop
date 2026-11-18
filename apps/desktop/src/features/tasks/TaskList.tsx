@@ -267,7 +267,7 @@ function FormatRow({
             <span className="tnum truncate text-xs text-muted">
               {stageLabel(task.current_stage)}
               {chapterSuffix(task.current_chapter)}
-              {task.chapters_done > 0 && ` · 已完成 ${task.chapters_done} 章`}
+              {task.chapters_done > 0 && ` · 已完成 ${task.chapters_done}${task.total_chapters ? `/${task.total_chapters}` : ""} 章`}
               {task.pages_done > 0 && ` · ${task.pages_done} 页`}
               {task.words_done > 0 && ` · ${formatWords(task.words_done)}`}
               {` · 已用时 ${elapsedText(task.started_at, null)}`}
@@ -407,7 +407,7 @@ function TaskDetailDrawer({
             <DetailRow label="阶段">{stageLabel(detail.current_stage) || "—"}</DetailRow>
             <DetailRow label="当前章节">{detail.current_chapter || "—"}</DetailRow>
             <DetailRow label="进度">
-              {detail.chapters_done > 0 ? `${detail.chapters_done} 章` : "—"}
+              {detail.chapters_done > 0 ? `${detail.chapters_done}${detail.total_chapters ? `/${detail.total_chapters}` : ""} 章` : "—"}
               {detail.pages_done > 0 && ` · ${detail.pages_done} 页`}
               {detail.words_done > 0 && ` · ${formatWords(detail.words_done)}`}
             </DetailRow>
