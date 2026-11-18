@@ -28,6 +28,7 @@ export const FORMAT_LABEL: Record<string, string> = {
   pdf: "PDF",
   epub: "EPUB",
   markdown: "Markdown",
+  notes: "笔记",
 };
 
 export function stageLabel(stage: string): string {
@@ -37,6 +38,7 @@ export function stageLabel(stage: string): string {
     crawl: "抓取正文",
     images: "下载插图",
     render: "生成文件",
+    notes: "拉取划线与想法",
   };
   return map[stage] ?? stage;
 }

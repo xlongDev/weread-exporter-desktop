@@ -1,6 +1,6 @@
 import type { LibraryFile, ShelfItem } from "../types";
 
-const FORMAT_ORDER: Record<string, number> = { pdf: 0, epub: 1, markdown: 2 };
+const FORMAT_ORDER: Record<string, number> = { pdf: 0, epub: 1, markdown: 2, notes: 3 };
 
 /** 书架条目：按书聚合导出文件（书库书架视图与首页「最近导出」共用） */
 export interface ShelfBook {

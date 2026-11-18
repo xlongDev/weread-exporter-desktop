@@ -11,6 +11,7 @@ WEREAD_MOCK=1 时为 Mock 模式：不启动浏览器、不发真实网络请求
 import asyncio
 import json
 import os
+import re
 import sys
 import threading
 
@@ -117,7 +118,7 @@ class Worker:
 
         book_id = crawl_weread.extract_book_id(params.get("book_id", ""))
         fmt = params.get("format", "markdown")
-        if fmt not in ("pdf", "epub", "markdown"):
+        if fmt not in ("pdf", "epub", "markdown", "notes"):
             self.emit("task.failed", {"code": "BAD_FORMAT", "message": f"不支持的格式: {fmt}", "user_message": f"暂不支持导出为 {fmt}", "recoverable": False}, task_id)
             return
         if not book_id:
@@ -134,6 +135,10 @@ class Worker:
 
         if MOCK:
             await self.run_task_mock(task_id, book_id, fmt, output_dir)
+            return
+
+        if fmt == "notes":
+            await self.run_notes_task(task_id, book_id, output_dir, filename_template)
             return
 
         if not skip_crawl:
@@ -184,6 +189,12 @@ class Worker:
 
     async def run_task_mock(self, task_id, book_id, fmt, output_dir):
         """Mock 事件回放：验证协议与任务生命周期，不访问真实平台。"""
+        if fmt == "notes":
+            fake_path = os.path.join(output_dir or os.path.join(ENGINE_DIR, "..", "output"), f"mock-{book_id}_划线与想法.md")
+            self.emit("task.progress", {"stage": "notes", "chapter_title": "拉取划线与想法"}, task_id)
+            self.emit("task.output", {"format": "notes", "file_path": fake_path, "file_size": 512}, task_id)
+            self.emit("task.completed", {"outputs": [{"format": "notes", "file_path": fake_path}]}, task_id)
+            return
         self.emit("task.progress", {"stage": "metadata", "chapter_title": "示例章节", "chapters_done": 0, "total_chapters": 3, "words": 0}, task_id)
         for i in range(1, 4):
             await asyncio.sleep(0.1)
@@ -192,6 +203,57 @@ class Worker:
         fake_path = os.path.join(output_dir or os.path.join(ENGINE_DIR, "..", "output"), f"mock-{book_id}.{ 'epub' if fmt == 'epub' else fmt }")
         self.emit("task.output", {"format": fmt, "file_path": fake_path, "file_size": 1024}, task_id)
         self.emit("task.completed", {"outputs": [{"format": fmt, "file_path": fake_path}]}, task_id)
+
+    # ---- 划线/想法导出（纯 HTTP，无翻页抓取；秒级完成）----
+    async def run_notes_task(self, task_id, book_id, output_dir, filename_template):
+        import crawl_weread
+        import export_book
+        import notes as notes_mod
+        from playwright.async_api import async_playwright
+
+        try:
+            async with async_playwright() as p:
+                ctx = await crawl_weread.launch_browser_context(p, crawl_weread.USER_DATA_DIR, headless=True)
+                try:
+                    logged_in = await crawl_weread.check_cookies_login(ctx)
+                    cookies = await ctx.cookies()
+                finally:
+                    await ctx.close()
+        except Exception as e:
+            self.log("notes profile exception: " + repr(e))
+            self.emit("task.failed", {"code": "NOTES_ERROR", "message": repr(e), "user_message": "读取登录态失败（详见任务日志），请重试", "recoverable": True}, task_id)
+            return
+        if not logged_in:
+            self.emit("task.failed", {"code": "LOGIN_REQUIRED", "message": "login required for notes", "user_message": "微信读书登录已失效，请重新登录后再导出笔记", "recoverable": True}, task_id)
+            return
+
+        self.emit("task.progress", {"stage": "notes", "chapter_title": "拉取划线与想法"}, task_id)
+        try:
+            meta = await asyncio.to_thread(crawl_weread.fetch_book_meta_http, book_id)
+        except Exception as e:
+            self.log("notes meta exception: " + repr(e))
+            meta = {}
+        data = await asyncio.to_thread(notes_mod.fetch_notes_http, cookies, book_id)
+        if data is None:
+            self.emit("task.failed", {"code": "NOTES_FETCH_FAILED", "message": "notes fetch failed", "user_message": "笔记获取失败（登录失效或网络异常），请重新登录或稍后重试", "recoverable": True}, task_id)
+            return
+        title = (meta.get("title") or data.get("title") or "").strip() or f"Book_{book_id}"
+        author = (meta.get("author") or data.get("author") or "").strip()
+        if not data["highlights"] and not data["reviews"]:
+            self.emit("task.failed", {"code": "NO_NOTES", "message": "no highlights or reviews", "user_message": "这本书暂无划线或想法，无可导出的笔记", "recoverable": False}, task_id)
+            return
+        md = notes_mod.render_notes_md(title, author, data["highlights"], data["chapters"], data["reviews"], book_id)
+
+        out_dir = output_dir or os.path.join(ENGINE_DIR, "..", "output")
+        os.makedirs(out_dir, exist_ok=True)
+        safe_title = re.sub(r'[<>:"/\\|?*]', "_", title) or book_id
+        base = export_book.build_base_name(filename_template, title, author, "笔记", book_id) or safe_title
+        path = os.path.join(out_dir, f"{base}_划线与想法.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(md)
+
+        self.emit("task.output", {"format": "notes", "file_path": path, "file_size": os.path.getsize(path)}, task_id)
+        self.emit("task.completed", {"outputs": [{"format": "notes", "file_path": path}]}, task_id)
 
     # ---- 书架列表（一键导入用：headless 提取 cookie → 纯 HTTP 调书架同步接口）----
     async def shelf_fetch(self, task_id):

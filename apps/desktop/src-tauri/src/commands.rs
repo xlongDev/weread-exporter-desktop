@@ -21,7 +21,7 @@ const SETTING_KEYS: &[&str] = &[
     "export.save_cover",
 ];
 
-const FORMATS: &[&str] = &["pdf", "epub", "markdown"];
+const FORMATS: &[&str] = &["pdf", "epub", "markdown", "notes"];
 
 #[derive(Serialize)]
 pub struct Stats {

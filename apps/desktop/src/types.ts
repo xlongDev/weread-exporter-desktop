@@ -39,7 +39,7 @@ export interface PathsInfo {
 }
 
 export type ThemeMode = "system" | "light" | "dark";
-export type ExportFormat = "pdf" | "epub" | "markdown";
+export type ExportFormat = "pdf" | "epub" | "markdown" | "notes";
 
 export type SettingsMap = Record<string, unknown>;
 

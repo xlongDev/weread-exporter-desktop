@@ -216,3 +216,43 @@ def test_worker_mock_shelf_fetch():
     finally:
         if proc.poll() is None:
             proc.kill()
+
+
+def test_worker_mock_notes_task(tmp_path):
+    proc = spawn_worker(mock=True)
+    reader = EventReader(proc)
+    try:
+        assert reader.next()["event"] == "engine.ready"
+        send(proc, {"protocol_version": 1, "cmd": "start_task", "task_id": "t-notes",
+                    "params": {"book_id": "mockbook123", "format": "notes", "output_dir": str(tmp_path)}})
+        ev = reader.next()
+        assert ev["event"] == "task.started" and ev["data"]["format"] == "notes"
+        ev = reader.next()
+        assert ev["event"] == "task.progress" and ev["data"]["stage"] == "notes"
+        ev = reader.next()
+        assert ev["event"] == "task.output" and ev["data"]["format"] == "notes"
+        ev = reader.next()
+        assert ev["event"] == "task.completed" and ev["data"]["outputs"][0]["file_path"].endswith(".md")
+
+        send(proc, {"protocol_version": 1, "cmd": "shutdown"})
+        proc.wait(timeout=10)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
+def test_worker_rejects_unknown_format():
+    proc = spawn_worker(mock=True)
+    reader = EventReader(proc)
+    try:
+        assert reader.next()["event"] == "engine.ready"
+        send(proc, {"protocol_version": 1, "cmd": "start_task", "task_id": "t-bad",
+                    "params": {"book_id": "mockbook123", "format": "docx", "output_dir": "unused"}})
+        ev = reader.next()
+        assert ev["event"] == "task.failed" and ev["data"]["code"] == "BAD_FORMAT"
+
+        send(proc, {"protocol_version": 1, "cmd": "shutdown"})
+        proc.wait(timeout=10)
+    finally:
+        if proc.poll() is None:
+            proc.kill()

@@ -10,7 +10,7 @@ import { Dialog } from "../../components/Dialog";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusPill } from "../../components/StatusPill";
 
-const FORMAT_LABEL: Record<string, string> = { pdf: "PDF", epub: "EPUB", markdown: "Markdown" };
+const FORMAT_LABEL: Record<string, string> = { pdf: "PDF", epub: "EPUB", markdown: "Markdown", notes: "笔记" };
 
 /** 书库：书架（按书的封面墙 + 格式文件行，默认）与文件列表（按文件平铺）两种视图 */
 export function Library() {

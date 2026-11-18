@@ -22,6 +22,7 @@ const FORMATS: { key: ExportFormat; name: string; hint: string }[] = [
   { key: "pdf", name: "精排 PDF", hint: "适合 iPad 批注与打印" },
   { key: "epub", name: "EPUB", hint: "适合 Apple Books / Kindle" },
   { key: "markdown", name: "Markdown", hint: "适合 Obsidian / Notion" },
+  { key: "notes", name: "笔记", hint: "划线与想法（Markdown，无需抓页）" },
 ];
 
 /** 发起 book_info op 并等待终态 book.validation（120s 超时兜底 worker 崩溃；ok=false 也返回，由调用方处置） */
@@ -479,7 +480,9 @@ export function Export() {
                   </span>
                   <span className="truncate text-[11px] text-faint">
                     {b.files
-                      .map((f) => (f.format === "markdown" ? "Markdown" : f.format.toUpperCase()))
+                      .map((f) =>
+                        f.format === "markdown" ? "Markdown" : f.format === "notes" ? "笔记" : f.format.toUpperCase(),
+                      )
                       .join(" · ")}
                   </span>
                 </button>
