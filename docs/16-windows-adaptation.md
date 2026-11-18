@@ -1,6 +1,6 @@
 # 16 - Windows 无边框玻璃壳适配评估
 
-> 状态：**评估文档，未实施**。当前无边框方案（tauri.conf `decorations:false` + `transparent:true` + 自绘红绿灯/拖拽区）在 macOS 已验证；本文记录把它带到 Windows 的差异、选项与建议。
+> 状态：**方案 A 代码面已落地（2026-11-19），Windows 真机验收未做**。已落地：`WindowControls` 右上矩形 caption 三钮（`features/close/WindowControls.tsx`，关闭复用 CloseGuard）、`app/platform.ts` UA 平台判定、AppShell 右上 chrome 条（拖拽+双击最大化）、壳圆角 `data-platform="windows"` → 8px（Win11 DWM 对齐）；macOS 布局零改动。浏览器模拟注入已验证布局与 hover；**待真机验收：缩放/阴影/WebView2 透明性能/DPI**。Win10 与 Win11 在 UA 上不可分辨（均 NT 10.0），直角实心降级待真机定。tauri.conf 分平台文件未做（当前配置两平台通用，无差异项）。
 
 ## 1. 现状回顾（macOS 已落地）
 

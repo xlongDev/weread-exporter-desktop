@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { BookOpen, LibraryBig, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
 import { useNav, type Page } from "../stores/nav";
 import { useAuth, type AuthStatus } from "../stores/auth";
+import { IS_WINDOWS } from "./platform";
 
 const NAV: { key: Page; label: string; icon: typeof BookOpen }[] = [
   { key: "export", label: "导出书籍", icon: BookOpen },
@@ -61,12 +62,12 @@ export function Sidebar() {
         collapsed ? "w-[72px]" : "w-[232px]"
       }`}
     >
-      {/* 红绿灯行（拖拽区） */}
+      {/* 红绿灯行（拖拽区；Windows 的 caption 控件在画布右上，见 AppShell） */}
       <div
         data-tauri-drag-region
         className={`flex h-11 flex-none items-center px-4 ${collapsed ? "justify-center" : "justify-start"}`}
       >
-        <TrafficLights />
+        {!IS_WINDOWS && <TrafficLights />}
       </div>
 
       {/* 标志行（拖拽区） */}

@@ -53,6 +53,11 @@ body {
   contain: paint;
 }
 
+/* Windows：壳圆角对齐 Win11 DWM 自动 8px（docs/16 方案 A） */
+:root[data-platform="windows"] #root {
+  border-radius: 8px;
+}
+
 /* 环境光晕层：玻璃模块的后方世界（backdrop-filter 的采样对象） */
 .ambient {
   background: var(--ambient);

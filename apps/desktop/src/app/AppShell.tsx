@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { TaskDock } from "../features/tasks/TaskDock";
+import { WindowControls } from "../features/close/WindowControls";
+import { IS_WINDOWS } from "./platform";
 import { useNav } from "../stores/nav";
 
 /** 应用壳（液态玻璃模块化）：环境光晕之上悬浮三块玻璃模块——侧栏轨道 / 画布纸 / 任务舱 */
@@ -26,6 +28,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           <TaskDock />
         </div>
       </div>
+      {IS_WINDOWS && (
+        // Windows chrome 条：右上悬浮于环境光晕，页面内容 pt-8（12 壳内距 + 32 页顶距）保证不被遮盖
+        <div
+          data-tauri-drag-region
+          className="absolute top-0 right-0 z-40 flex h-10 items-center justify-end pr-1.5"
+        >
+          <WindowControls />
+        </div>
+      )}
     </div>
   );
 }
