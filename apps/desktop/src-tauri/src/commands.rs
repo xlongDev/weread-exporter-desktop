@@ -300,45 +300,53 @@ pub struct TaskRow {
 
 #[tauri::command]
 pub fn list_tasks(state: State<'_, AppState>, limit: i64) -> Result<Vec<TaskRow>, String> {
-    let conn = state.db.lock().map_err(lock_err)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT t.id, t.book_id, b.title, COALESCE(b.cover_path,''), t.format, t.status,
-                    t.progress, COALESCE(t.current_stage,''), COALESCE(t.current_chapter,''),
-                    t.pages_done, t.words_done,
-                    (SELECT count(*) FROM task_chapters c WHERE c.task_id=t.id AND c.status='done'),
-                    t.created_at, t.started_at, t.finished_at, t.error_code, t.error_message, t.output_dir
-             FROM export_tasks t LEFT JOIN books b ON b.book_id = t.book_id
-             ORDER BY t.created_at DESC, t.id DESC LIMIT ?1",
-        )
-        .map_err(|e| format!("查询任务失败: {e}"))?;
-    let rows = stmt
-        .query_map([limit], |r| {
-            Ok(TaskRow {
-                id: r.get(0)?,
-                book_id: r.get(1)?,
-                title: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                cover_path: r.get(3)?,
-                format: r.get(4)?,
-                status: r.get(5)?,
-                progress: r.get(6)?,
-                current_stage: r.get(7)?,
-                current_chapter: r.get(8)?,
-                pages_done: r.get(9)?,
-                words_done: r.get(10)?,
-                chapters_done: r.get(11)?,
-                created_at: r.get(12)?,
-                started_at: r.get(13)?,
-                finished_at: r.get(14)?,
-                error_code: r.get(15)?,
-                error_message: r.get(16)?,
-                output_dir: r.get(17)?,
+    let mut out = {
+        let conn = state.db.lock().map_err(lock_err)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT t.id, t.book_id, b.title, COALESCE(b.cover_path,''), t.format, t.status,
+                        t.progress, COALESCE(t.current_stage,''), COALESCE(t.current_chapter,''),
+                        t.pages_done, t.words_done,
+                        (SELECT count(*) FROM task_chapters c WHERE c.task_id=t.id AND c.status='done'),
+                        t.created_at, t.started_at, t.finished_at, t.error_code, t.error_message, t.output_dir
+                 FROM export_tasks t LEFT JOIN books b ON b.book_id = t.book_id
+                 ORDER BY t.created_at DESC, t.id DESC LIMIT ?1",
+            )
+            .map_err(|e| format!("查询任务失败: {e}"))?;
+        let rows = stmt
+            .query_map([limit], |r| {
+                Ok(TaskRow {
+                    id: r.get(0)?,
+                    book_id: r.get(1)?,
+                    title: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                    cover_path: r.get(3)?,
+                    format: r.get(4)?,
+                    status: r.get(5)?,
+                    progress: r.get(6)?,
+                    current_stage: r.get(7)?,
+                    current_chapter: r.get(8)?,
+                    pages_done: r.get(9)?,
+                    words_done: r.get(10)?,
+                    chapters_done: r.get(11)?,
+                    created_at: r.get(12)?,
+                    started_at: r.get(13)?,
+                    finished_at: r.get(14)?,
+                    error_code: r.get(15)?,
+                    error_message: r.get(16)?,
+                    output_dir: r.get(17)?,
+                })
             })
-        })
-        .map_err(|e| format!("查询任务失败: {e}"))?;
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row.map_err(|e| format!("读取任务行失败: {e}"))?);
+            .map_err(|e| format!("查询任务失败: {e}"))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(|e| format!("读取任务行失败: {e}"))?);
+        }
+        out
+    };
+    // 封面兜底修复（锁外，理由同 list_files）：任务行的封面同样随书修复
+    for t in out.iter_mut() {
+        let dir = std::path::Path::new(&t.output_dir).to_path_buf();
+        t.cover_path = repair_book_cover(&state, &t.book_id, &t.cover_path, Some(&dir));
     }
     Ok(out)
 }
@@ -407,65 +415,93 @@ pub struct LibraryFile {
     created_at: String,
 }
 
+/// 封面兜底修复：cover_path 为空或文件丢失时，从随书数据根（<dir>/<book_id>_v2/cover.jpg）
+/// 拷入应用数据目录（命中 asset 协议范围）并回写 books.cover_path —— 任务行/书库行都 join books，
+/// 一次修复处处生效。返回修复后的路径（无候选时原样返回）。
+fn repair_book_cover(
+    state: &AppState,
+    book_id: &str,
+    cover_path: &str,
+    data_dir: Option<&std::path::Path>,
+) -> String {
+    if !cover_path.is_empty() && std::path::Path::new(cover_path).is_file() {
+        return cover_path.to_string();
+    }
+    let Some(dir) = data_dir else {
+        return cover_path.to_string();
+    };
+    let src = dir.join(format!("{book_id}_v2")).join("cover.jpg");
+    if !src.is_file() {
+        return cover_path.to_string();
+    }
+    let dest_dir = state.paths.app_data.join("covers");
+    let _ = std::fs::create_dir_all(&dest_dir);
+    let dest = dest_dir.join(format!("{book_id}_export.jpg"));
+    if !dest.is_file() {
+        let _ = std::fs::copy(&src, &dest);
+    }
+    if !dest.is_file() {
+        return cover_path.to_string();
+    }
+    let repaired = dest.to_string_lossy().into_owned();
+    if let Ok(conn) = state.db.lock() {
+        let _ = conn.execute(
+            "UPDATE books SET cover_path=?2 WHERE book_id=?1",
+            rusqlite::params![book_id, repaired],
+        );
+    }
+    repaired
+}
+
 /// 书库列表：导出产物 join 书籍；顺带回写文件存在性。
 #[tauri::command]
 pub fn list_files(state: State<'_, AppState>) -> Result<Vec<LibraryFile>, String> {
-    let conn = state.db.lock().map_err(lock_err)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT f.id, f.book_id, COALESCE(b.title,''), COALESCE(b.author,''),
-                    COALESCE(b.cover_path,''), f.format, f.file_path, f.file_name,
-                    f.file_size, f.created_at
-             FROM exported_files f LEFT JOIN books b ON b.book_id = f.book_id
-             ORDER BY f.created_at DESC, f.id DESC",
-        )
-        .map_err(|e| format!("查询书库失败: {e}"))?;
-    let rows = stmt
-        .query_map([], |r| {
-            Ok(LibraryFile {
-                id: r.get(0)?,
-                book_id: r.get(1)?,
-                title: r.get(2)?,
-                author: r.get(3)?,
-                cover_path: r.get(4)?,
-                format: r.get(5)?,
-                file_path: r.get(6)?,
-                file_name: r.get(7)?,
-                file_size: r.get(8)?,
-                created_at: r.get(9)?,
-                exists_ok: false,
+    let mut out = {
+        let conn = state.db.lock().map_err(lock_err)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT f.id, f.book_id, COALESCE(b.title,''), COALESCE(b.author,''),
+                        COALESCE(b.cover_path,''), f.format, f.file_path, f.file_name,
+                        f.file_size, f.created_at
+                 FROM exported_files f LEFT JOIN books b ON b.book_id = f.book_id
+                 ORDER BY f.created_at DESC, f.id DESC",
+            )
+            .map_err(|e| format!("查询书库失败: {e}"))?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(LibraryFile {
+                    id: r.get(0)?,
+                    book_id: r.get(1)?,
+                    title: r.get(2)?,
+                    author: r.get(3)?,
+                    cover_path: r.get(4)?,
+                    format: r.get(5)?,
+                    file_path: r.get(6)?,
+                    file_name: r.get(7)?,
+                    file_size: r.get(8)?,
+                    created_at: r.get(9)?,
+                    exists_ok: false,
+                })
             })
-        })
-        .map_err(|e| format!("查询书库失败: {e}"))?;
-    let mut out = Vec::new();
-    for row in rows {
-        let mut f = row.map_err(|e| format!("读取书库行失败: {e}"))?;
-        f.exists_ok = std::path::Path::new(&f.file_path).is_file();
-        // 封面兜底：书籍记录缺封面（旧记录/补下失败）时，回退到导出目录内随书携带的
-        // cover.jpg（抓取数据根 <输出目录>/<book_id>_v2/），拷入应用数据目录以命中 asset 协议范围
-        if f.cover_path.is_empty() || !std::path::Path::new(&f.cover_path).is_file() {
-            let bundled = std::path::Path::new(&f.file_path)
-                .parent()
-                .map(|p| p.join(format!("{}_v2", f.book_id)).join("cover.jpg"));
-            if let Some(src) = bundled {
-                if src.is_file() {
-                    let dest_dir = state.paths.app_data.join("covers");
-                    let _ = std::fs::create_dir_all(&dest_dir);
-                    let dest = dest_dir.join(format!("{}_export.jpg", f.book_id));
-                    if !dest.is_file() {
-                        let _ = std::fs::copy(&src, &dest);
-                    }
-                    if dest.is_file() {
-                        f.cover_path = dest.to_string_lossy().into_owned();
-                    }
-                }
-            }
+            .map_err(|e| format!("查询书库失败: {e}"))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let mut f = row.map_err(|e| format!("读取书库行失败: {e}"))?;
+            f.exists_ok = std::path::Path::new(&f.file_path).is_file();
+            let _ = conn.execute(
+                "UPDATE exported_files SET exists_ok=?2 WHERE id=?1",
+                rusqlite::params![f.id, f.exists_ok as i64],
+            );
+            out.push(f);
         }
-        let _ = conn.execute(
-            "UPDATE exported_files SET exists_ok=?2 WHERE id=?1",
-            rusqlite::params![f.id, f.exists_ok as i64],
-        );
-        out.push(f);
+        out
+    };
+    // 封面兜底修复在锁外执行：repair 内部会短暂持锁回写 books（std Mutex 不可重入）
+    for f in out.iter_mut() {
+        let dir = std::path::Path::new(&f.file_path)
+            .parent()
+            .map(|p| p.to_path_buf());
+        f.cover_path = repair_book_cover(&state, &f.book_id, &f.cover_path, dir.as_deref());
     }
     Ok(out)
 }
