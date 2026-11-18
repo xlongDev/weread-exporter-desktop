@@ -444,6 +444,7 @@ fn route_event<R: Runtime>(app: &AppHandle<R>, engine_task_id: &str, running: &A
                 if let Err(e) = apply_task_event(&conn, engine_task_id, &ev, &mut outputs) {
                     log::write("ERROR", &format!("任务事件落库失败: {e}"));
                 }
+                notify_task_terminal(app, &conn, engine_task_id, &ev.event);
             }
             // 任务结束：通知 worker 退出并回收
             let _ = running
@@ -496,6 +497,7 @@ fn finalize_on_exit<R: Runtime>(app: &AppHandle<R>, engine_task_id: &str, runnin
     if let Ok(conn) = state.db.lock() {
         let mut outputs = Vec::new();
         let _ = apply_task_event(&conn, engine_task_id, &ev, &mut outputs);
+        notify_task_terminal(app, &conn, engine_task_id, &ev.event);
     }
     if let Ok(mut map) = app.state::<AppState>().running.lock()
         && let Ok(id) = engine_task_id.parse::<i64>()
@@ -504,6 +506,36 @@ fn finalize_on_exit<R: Runtime>(app: &AppHandle<R>, engine_task_id: &str, runnin
     }
     start_next_queued(app);
     log::write("WARN", &format!("任务 {engine_task_id} 的引擎进程在终态事件前退出"));
+}
+
+/// 任务终态系统通知（cancelled 不打扰）。书名/格式/失败原因取自 DB，须在落库后调用。
+fn notify_task_terminal<R: Runtime>(app: &AppHandle<R>, conn: &Connection, engine_task_id: &str, event: &str) {
+    if event != "task.completed" && event != "task.failed" {
+        return;
+    }
+    let Ok(id) = engine_task_id.parse::<i64>() else { return };
+    let (title, format, error_message) = match conn.query_row(
+        "SELECT COALESCE(b.title,''), t.format, COALESCE(t.error_message,'')
+         FROM export_tasks t LEFT JOIN books b ON b.book_id=t.book_id WHERE t.id=?1",
+        [id],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)),
+    ) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    use tauri_plugin_notification::NotificationExt;
+    // 插件未注册的环境（如测试 mock runtime）直接跳过，不 panic、不发真通知
+    if app.try_state::<tauri_plugin_notification::Notification<R>>().is_none() {
+        return;
+    }
+    let (ntitle, nbody) = if event == "task.completed" {
+        ("导出完成", format!("《{title}》· {}", format.to_uppercase()))
+    } else {
+        ("导出失败", format!("《{title}》· {error_message}"))
+    };
+    if let Err(e) = app.notification().builder().title(ntitle).body(&nbody).show() {
+        log::write("WARN", &format!("系统通知发送失败: {e}"));
+    }
 }
 
 /// 把引擎事件落到 SQLite 任务状态机。返回值表示是否为终态事件。
