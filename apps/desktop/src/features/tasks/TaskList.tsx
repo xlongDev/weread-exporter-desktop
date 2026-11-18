@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, FolderOpen, Minus, X } from "lucide-react";
+import { Check, FolderOpen, Minus, Trash2, X } from "lucide-react";
 import { api, toAppError } from "../../services/api";
 import type { TaskDetail, TaskRow } from "../../types";
 import { Button } from "../../components/Button";
 import { BookCover } from "../../components/BookCover";
+import { Dialog } from "../../components/Dialog";
 import { Drawer } from "../../components/Drawer";
 import { StatusPill, type PillTone } from "../../components/StatusPill";
 
@@ -92,18 +93,64 @@ function groupTasks(tasks: TaskRow[]): TaskGroup[] {
   }));
 }
 
-/** 任务列表：按书分组，行内取消/定位 + 详情抽屉（docs/04 §4.3），由任务 dock 面板复用 */
+/** 任务列表：按书分组，行内取消/删除/定位 + 详情抽屉（docs/04 §4.3），由任务 dock 面板复用 */
 export function TaskList({ tasks, onChanged }: { tasks: TaskRow[]; onChanged: () => void }) {
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<TaskRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const groups = useMemo(() => groupTasks(tasks), [tasks]);
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    try {
+      await api.deleteTask(pendingDelete.id);
+      setPendingDelete(null);
+      setDeleteError(null);
+      onChanged();
+    } catch (e) {
+      setDeleteError(toAppError(e).userMessage);
+    }
+  }
 
   return (
     <>
       <div className="flex flex-col gap-5 pt-1 pb-1">
         {groups.map((g) => (
-          <TaskGroupItem key={g.bookId} group={g} onOpen={setDetailId} />
+          <TaskGroupItem key={g.bookId} group={g} onOpen={setDetailId} onDelete={setPendingDelete} />
         ))}
       </div>
+      {pendingDelete && (
+        <Dialog
+          title="删除这条任务记录？"
+          onClose={() => {
+            setPendingDelete(null);
+            setDeleteError(null);
+          }}
+          actions={
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setPendingDelete(null);
+                  setDeleteError(null);
+                }}
+              >
+                取消
+              </Button>
+              <Button onClick={() => void confirmDelete()}>删除记录</Button>
+            </>
+          }
+        >
+          <p>
+            《{pendingDelete.title || pendingDelete.book_id}》（
+            {FORMAT_LABEL[pendingDelete.format] ?? pendingDelete.format}）
+          </p>
+          <p className="text-xs text-faint">
+            仅删除记录与断点续传进度；磁盘上的导出文件与书库不受影响。
+          </p>
+          {deleteError && <p className="text-sm text-negative-text">{deleteError}</p>}
+        </Dialog>
+      )}
       {detailId !== null && (
         <TaskDetailDrawer
           taskId={detailId}
@@ -118,9 +165,11 @@ export function TaskList({ tasks, onChanged }: { tasks: TaskRow[]; onChanged: ()
 function TaskGroupItem({
   group,
   onOpen,
+  onDelete,
 }: {
   group: TaskGroup;
   onOpen: (id: number) => void;
+  onDelete: (task: TaskRow) => void;
 }) {
   return (
     <div className="flex flex-col">
@@ -130,7 +179,7 @@ function TaskGroupItem({
       </div>
       <div className="ml-[52px] flex flex-col">
         {group.tasks.map((t) => (
-          <FormatRow key={t.id} task={t} onOpen={() => onOpen(t.id)} />
+          <FormatRow key={t.id} task={t} onOpen={() => onOpen(t.id)} onDelete={() => onDelete(t)} />
         ))}
       </div>
     </div>
@@ -161,7 +210,15 @@ function StatusGlyph({ status }: { status: TaskRow["status"] }) {
   }
 }
 
-function FormatRow({ task, onOpen }: { task: TaskRow; onOpen: () => void }) {
+function FormatRow({
+  task,
+  onOpen,
+  onDelete,
+}: {
+  task: TaskRow;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
   const [, setTick] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -249,6 +306,11 @@ function FormatRow({ task, onOpen }: { task: TaskRow; onOpen: () => void }) {
           <Button variant="ghost" onClick={() => void reveal()} aria-label="打开输出文件夹">
             <FolderOpen size={14} strokeWidth={1.5} aria-hidden="true" />
             文件夹
+          </Button>
+        )}
+        {(task.status === "completed" || task.status === "failed" || task.status === "cancelled") && (
+          <Button variant="ghost" onClick={onDelete} aria-label="删除记录" title="删除记录">
+            <Trash2 size={14} strokeWidth={1.5} aria-hidden="true" />
           </Button>
         )}
       </div>

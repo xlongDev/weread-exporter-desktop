@@ -101,6 +101,53 @@ mod tests {
     }
 
     #[test]
+    fn delete_task_only_removes_finished_rows_and_cascades_chapters() {
+        let path = tmp_db("delete-task");
+        let mut conn = open(&path).unwrap();
+        migrate(&mut conn, &path).unwrap();
+        conn.execute(
+            "INSERT INTO books(book_id, title) VALUES ('b1', '书')",
+            [],
+        )
+        .unwrap();
+        for (id, status) in [(1i64, "failed"), (2, "completed"), (3, "running")] {
+            conn.execute(
+                "INSERT INTO export_tasks(id, book_id, format, output_dir, status)
+                 VALUES (?1, 'b1', 'pdf', '/tmp', ?2)",
+                rusqlite::params![id, status],
+            )
+            .unwrap();
+        }
+        conn.execute(
+            "INSERT INTO task_chapters(task_id, chapter_idx) VALUES (1, 0), (3, 0)",
+            [],
+        )
+        .unwrap();
+
+        // failed → 可删；章节随 ON DELETE CASCADE 级联清除
+        assert_eq!(crate::commands::delete_task_conn(&conn, 1).unwrap(), 1);
+        let chapters: i64 = conn
+            .query_row("SELECT count(*) FROM task_chapters WHERE task_id=1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(chapters, 0);
+
+        // running → 不删除（守卫在 WHERE 中返回 0 行；命令层把 0 行转为错误提示）
+        assert_eq!(crate::commands::delete_task_conn(&conn, 3).unwrap(), 0);
+        let left: i64 = conn
+            .query_row("SELECT count(*) FROM export_tasks", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(left, 2);
+
+        // completed → 可删
+        assert_eq!(crate::commands::delete_task_conn(&conn, 2).unwrap(), 1);
+        let left: i64 = conn
+            .query_row("SELECT count(*) FROM export_tasks", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(left, 1);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
     fn migrate_from_scratch_reaches_latest_version() {
         let path = tmp_db("fresh");
         let mut conn = open(&path).unwrap();

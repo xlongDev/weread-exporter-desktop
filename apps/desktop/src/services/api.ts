@@ -43,6 +43,7 @@ export const api = {
   deleteExportedFile: (id: number, deleteFile: boolean) =>
     invoke<void>("delete_exported_file", { id, deleteFile }),
   clearFinishedTasks: () => invoke<number>("clear_finished_tasks"),
+  deleteTask: (taskId: number) => invoke<void>("delete_task", { taskId }),
   clearLibraryRecords: () => invoke<number>("clear_library_records"),
   diagnostics: () => invoke<string>("diagnostics_text"),
 };

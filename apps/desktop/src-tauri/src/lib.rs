@@ -57,6 +57,7 @@ pub fn run() {
             commands::open_file,
             commands::reveal_exported_file,
             commands::clear_finished_tasks,
+            commands::delete_task,
             commands::clear_library_records,
             commands::delete_exported_file,
             commands::get_task_detail,

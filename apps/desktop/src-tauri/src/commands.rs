@@ -649,6 +649,28 @@ pub fn clear_finished_tasks(state: State<'_, AppState>) -> Result<u64, String> {
     Ok(n)
 }
 
+/// 删除单条任务记录（仅允许已结束的任务；章节随 ON DELETE CASCADE 级联删除，
+/// 导出文件与书库记录不受影响）。
+pub fn delete_task_conn(conn: &Connection, task_id: i64) -> Result<u64, String> {
+    Ok(conn
+        .execute(
+            "DELETE FROM export_tasks WHERE id=?1 AND status IN ('completed','cancelled','failed')",
+            [task_id],
+        )
+        .map_err(|e| format!("删除任务记录失败: {e}"))? as u64)
+}
+
+#[tauri::command]
+pub fn delete_task(state: State<'_, AppState>, task_id: i64) -> Result<(), String> {
+    let conn = state.db.lock().map_err(lock_err)?;
+    let n = delete_task_conn(&conn, task_id)?;
+    if n == 0 {
+        return Err("任务不存在或仍在进行中；进行中的任务请先取消".into());
+    }
+    log::write("INFO", &format!("task {task_id} record deleted"));
+    Ok(())
+}
+
 /// 一键清除书库记录（仅记录，磁盘文件不动）。
 pub fn clear_library_records_conn(conn: &Connection) -> Result<u64, String> {
     Ok(conn
