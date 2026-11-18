@@ -176,7 +176,7 @@ export function Settings() {
               onKeyDown={(e) => e.key === "Enter" && void saveNaming()}
               placeholder="留空使用默认命名"
               spellCheck={false}
-              className="h-9 w-full max-w-[380px] rounded-full border border-line bg-surface px-3.5 text-sm outline-none placeholder:text-faint focus:border-[var(--data)]"
+              className="input-glass h-9 w-full max-w-[380px] rounded-full px-3.5 text-sm outline-none placeholder:text-faint"
               aria-label="导出文件名模板"
             />
             <p className="text-xs text-faint">

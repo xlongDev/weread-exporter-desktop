@@ -121,7 +121,7 @@ export function Library() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索书名或作者"
           spellCheck={false}
-          className="h-8 w-64 rounded-full border border-line bg-surface px-3 text-sm outline-none placeholder:text-faint focus:border-[var(--data)]"
+          className="input-glass h-8 w-64 rounded-full px-3 text-sm outline-none placeholder:text-faint"
           aria-label="搜索书库"
         />
         {["all", "pdf", "epub", "markdown"].map((fmt) => (

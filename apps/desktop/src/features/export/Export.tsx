@@ -238,7 +238,7 @@ export function Export() {
             onKeyDown={(e) => e.key === "Enter" && void parse()}
             placeholder="粘贴微信读书书籍链接或 ID"
             spellCheck={false}
-            className="h-11 flex-1 rounded-full border border-line bg-surface px-5 text-[15px] text-ink outline-none placeholder:text-faint focus:border-[var(--data)]"
+            className="input-glass h-11 flex-1 rounded-full px-5 text-[15px] text-ink placeholder:text-faint"
             aria-label="微信读书书籍链接或 ID"
           />
           <Button size="lg" variant="secondary" disabled={phase === "parsing"} onClick={() => void pasteAndFetch()}>

@@ -86,10 +86,25 @@ body {
 }
 
 /* 键盘焦点环 */
+/* 键盘焦点环（outline 自动跟随元素自身圆角） */
 :focus-visible {
   outline: 2px solid var(--data);
-  outline-offset: 1px;
-  border-radius: 2px;
+  outline-offset: 2px;
+}
+
+/* 输入控件（液态玻璃）：hover 边框提亮一档，focus 数据蓝描边 + 跟随圆角的柔和光环 */
+.input-glass {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.input-glass:hover {
+  border-color: var(--control);
+}
+.input-glass:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--data) 60%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--data) 20%, transparent);
 }
 
 /* 数字与统计一律表格数字 */
