@@ -85,6 +85,9 @@ class Worker:
         if action == "shelf_fetch":
             await self.shelf_fetch(task_id)
             return
+        if action == "notes_summary":
+            await self.notes_summary(task_id, cmd.get("params") or {})
+            return
 
         self.emit("engine.error", {"code": "UNKNOWN_CMD", "message": f"未知指令: {action}"}, task_id)
 
@@ -235,7 +238,10 @@ class Worker:
         except Exception as e:
             self.log("notes meta exception: " + repr(e))
             meta = {}
-        data = await asyncio.to_thread(notes_mod.fetch_notes_http, cookies, book_id)
+        # 想法端点只认数字 bookId：从 bookDetail 页提取（v-hash 任务场景），数字任务场景回退原 ID
+        data = await asyncio.to_thread(
+            notes_mod.fetch_notes_http, cookies, book_id, None,
+            (meta.get("numeric_id") or "").strip() or None)
         if data is None:
             self.emit("task.failed", {"code": "NOTES_FETCH_FAILED", "message": "notes fetch failed", "user_message": "笔记获取失败（登录失效或网络异常），请重新登录或稍后重试", "recoverable": True}, task_id)
             return
@@ -257,6 +263,99 @@ class Worker:
         self.emit("task.output", {"format": "notes", "file_path": path, "file_size": os.path.getsize(path)}, task_id)
         self.emit("task.completed", {"outputs": [{"format": "notes", "file_path": path}]}, task_id)
 
+    # ---- 书架划线汇总（纯 HTTP 逐本拉取，合并为一个 Markdown；类 Readwise）----
+    async def notes_summary(self, task_id, params):
+        import datetime
+        import crawl_weread
+        import notes as notes_mod
+        from playwright.async_api import async_playwright
+
+        # books: [{id: 划线端点用的 v-hash/数字 ID, review_id: 想法端点专用数字 ID,
+        #          title/author: 书架卡片自带（回包无书籍信息时兜底）}]
+        entries = []
+        for it in params.get("books") or []:
+            if isinstance(it, dict):
+                bid = str(it.get("id") or "").strip()
+                if bid:
+                    entries.append({
+                        "id": bid,
+                        "review_id": str(it.get("review_id") or "").strip() or None,
+                        "title": str(it.get("title") or "").strip(),
+                        "author": str(it.get("author") or "").strip(),
+                    })
+        out_dir = params.get("output_dir") or os.path.join(ENGINE_DIR, "..", "output")
+        if not entries:
+            self.emit("notes.summary_error", {"code": "NO_BOOKS", "user_message": "未选择任何书籍"}, task_id)
+            return
+
+        if MOCK:
+            for i, e in enumerate(entries):
+                self.emit("notes.summary_progress", {"done": i + 1, "total": len(entries), "title": e["title"] or f"Mock 书 {i + 1}"}, task_id)
+            self.emit("notes.summary_done", {
+                "file_path": os.path.join(out_dir, "mock-划线汇总.md"), "file_size": 1024,
+                "books_ok": len(entries), "books_empty": 0,
+                "total_highlights": 30 * len(entries), "total_reviews": 0,
+            }, task_id)
+            return
+
+        try:
+            async with async_playwright() as p:
+                ctx = await crawl_weread.launch_browser_context(p, crawl_weread.USER_DATA_DIR, headless=True)
+                try:
+                    logged_in = await crawl_weread.check_cookies_login(ctx)
+                    cookies = await ctx.cookies()
+                finally:
+                    await ctx.close()
+        except Exception as e:
+            self.log("notes_summary profile exception: " + repr(e))
+            self.emit("notes.summary_error", {"code": "NOTES_ERROR", "user_message": "读取登录态失败（详见任务日志），请重试"}, task_id)
+            return
+        if not logged_in:
+            self.emit("notes.summary_error", {"code": "LOGIN_REQUIRED", "user_message": "微信读书登录已失效，请重新登录后再汇总划线"}, task_id)
+            return
+
+        # 允许取消（书与书之间生效；书内单次 HTTP 不可中断）
+        self.current_task_id = task_id
+        self.cancel_event.clear()
+        books, skipped = [], 0
+        total = len(entries)
+        try:
+            for i, e in enumerate(entries):
+                if self.cancel_event.is_set():
+                    self.emit("notes.summary_error", {"code": "CANCELLED", "user_message": "已取消，未生成文件"}, task_id)
+                    return
+                data = await asyncio.to_thread(notes_mod.fetch_notes_http, cookies, e["id"], None, e["review_id"])
+                title = ((data or {}).get("title") or "").strip() or e["title"] or e["id"]
+                author = ((data or {}).get("author") or "").strip() or e["author"]
+                self.emit("notes.summary_progress", {"done": i + 1, "total": total, "title": title}, task_id)
+                if data and (data["highlights"] or data["reviews"]):
+                    data["title"], data["author"] = title, author
+                    books.append(data)
+                else:
+                    skipped += 1
+                    self.log(f"summary skip {e['id']}: no notes")
+                await asyncio.sleep(0.5)  # 书间小间隔，温和访问
+        finally:
+            self.current_task_id = None
+
+        if not books:
+            self.emit("notes.summary_error", {"code": "NO_NOTES", "user_message": "所选书籍均无划线或想法，未生成文件"}, task_id)
+            return
+        md = notes_mod.render_summary_md(books, when=datetime.datetime.now().strftime("%Y-%m-%d"))
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, f"划线汇总_{datetime.datetime.now().strftime('%Y%m%d-%H%M')}.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(md)
+        self.log(f"summary written: {path} ({len(books)} books, {skipped} skipped)")
+        self.emit("notes.summary_done", {
+            "file_path": path,
+            "file_size": os.path.getsize(path),
+            "books_ok": len(books),
+            "books_empty": skipped,
+            "total_highlights": sum(len(b["highlights"]) for b in books),
+            "total_reviews": sum(len(b["reviews"]) for b in books),
+        }, task_id)
+
     # ---- 书架列表（一键导入用：headless 提取 cookie → 纯 HTTP 调书架同步接口）----
     async def shelf_fetch(self, task_id):
         import crawl_weread
@@ -265,9 +364,9 @@ class Worker:
         if MOCK:
             await asyncio.sleep(0.1)
             self.emit("shelf.books", {"count": 3, "books": [
-                {"book_id": "mockbook123", "title": "Mock 书架书一", "author": "Mock 作者", "cover": ""},
-                {"book_id": "mockbook456", "title": "Mock 书架书二", "author": "Mock 作者", "cover": ""},
-                {"book_id": "mockbook789", "title": "Mock 书架书三", "author": "", "cover": ""},
+                {"book_id": "mockbook123", "title": "Mock 书架书一", "author": "Mock 作者", "cover": "", "group": ""},
+                {"book_id": "mockbook456", "title": "Mock 书架书二", "author": "Mock 作者", "cover": "", "group": ""},
+                {"book_id": "mockbook789", "title": "Mock 书架书三", "author": "", "cover": "", "group": ""},
             ]}, task_id)
             return
 

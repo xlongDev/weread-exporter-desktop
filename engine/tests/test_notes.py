@@ -83,6 +83,33 @@ def test_fetch_notes_http_err_code_returns_none():
     assert notes.fetch_notes_http([], "b", get_json=get) is None
 
 
+def test_fetch_notes_http_review_param_error_degrades_to_highlights():
+    """review/list 只认数字 bookId：v-hash 报 -2003 时降级为仅划线；数字 ID 经 review_book_id 正常拉想法。"""
+    bm = {"updated": [{"chapterUid": 1, "markText": "划线一"}], "chapters": [{"chapterUid": 1, "title": "第一章"}]}
+    rv_err = {"errCode": -2003}
+    get, calls = _fake_get_json([bm, rv_err])
+    out = notes.fetch_notes_http([], "6c532640716e83", get_json=get)
+    assert out is not None and out["highlights"] and out["reviews"] == []
+    # review 端点用了传入的 book_id（无数字 ID 可用时回退），且 bookmarklist 用原 ID
+    assert "bookId=6c532640716e83" in calls[0]
+    assert "bookId=6c532640716e83&listType=11" in calls[1]
+
+    # 书架数字 ID（review_book_id）→ 想法端点用数字 ID，划线端点仍用 hash
+    rv_ok = {"reviews": [{"review": {"content": "想法一", "chapterName": ""}}], "hasMore": 0}
+    get2, calls2 = _fake_get_json([bm, rv_ok])
+    out2 = notes.fetch_notes_http([], "6c532640716e83", get_json=get2, review_book_id="24019719")
+    assert "bookId=6c532640716e83" in calls2[0]
+    assert "bookId=24019719&listType=11" in calls2[1]
+    assert out2["reviews"][0]["content"] == "想法一"
+
+
+def test_fetch_notes_http_review_other_errcode_returns_none():
+    """review 端点非 -2003 的 errCode（登录失效等）保持整体失败语义。"""
+    bm = {"updated": [], "chapters": []}
+    get, _ = _fake_get_json([bm, {"errCode": -2012}])
+    assert notes.fetch_notes_http([], "b", get_json=get) is None
+
+
 def test_fetch_notes_http_network_error_returns_none():
     def boom(url, cookies):
         raise OSError("down")
@@ -118,3 +145,33 @@ def test_render_notes_md_chapter_fallback_and_reviews():
     assert "- 【第二章】章节想法" in md
     assert "- 整本书评" in md
     assert "作者" not in md  # 空作者不输出引用行
+
+
+# ---------- render_summary_md（书架划线汇总）----------
+
+def test_render_summary_md_merges_books_with_h2_sections():
+    b1 = {
+        "title": "书一", "author": "作者甲",
+        "highlights": [
+            {"chapter_uid": 1, "text": "划线一", "range": "", "create_time": 0},
+            {"chapter_uid": 1, "text": "划线二", "range": "", "create_time": 0},
+        ],
+        "chapters": {1: "第一章"}, "reviews": [],
+    }
+    b2 = {
+        "title": "书二", "author": "",
+        "highlights": [{"chapter_uid": 9, "text": "划线三", "range": "", "create_time": 0}],
+        "chapters": {}, "reviews": [{"content": "想法", "chapter_name": "", "create_time": 0, "star": -1}],
+    }
+    md = notes.render_summary_md([b1, b2], when="2026-11-20")
+    assert md.startswith("# 划线汇总")
+    assert "书 2 本 · 划线 3 条 · 想法 1 条" in md
+    assert "## 《书一》" in md and "> 作者甲" in md and "## 《书二》" in md
+    # 汇总内章节降一级为 ###（书名是 ##）
+    assert "### 第一章" in md and "### 章节 9" in md and "### 想法" in md
+    assert "> 划线一" in md and "- 想法" in md
+
+
+def test_render_summary_md_empty_books_list():
+    md = notes.render_summary_md([])
+    assert "书 0 本 · 划线 0 条 · 想法 0 条" in md

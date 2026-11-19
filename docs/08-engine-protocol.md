@@ -29,7 +29,7 @@
 {"protocol_version":1, "cmd":"shutdown"}
 ```
 
-`format:"notes"`（划线/想法导出）：不抓页，headless 提取 cookie 后纯 HTTP 拉取该书划线与想法，渲染单文件 `{书名}_划线与想法.md`；无笔记 → `task.failed{code:"NO_NOTES"}`。
+`format:"notes"`（划线/想法导出）：不抓页，headless 提取 cookie 后纯 HTTP 拉取该书划线与想法，渲染单文件 `{书名}_划线与想法.md`；无笔记 → `task.failed{code:"NO_NOTES"}`。双 ID 体系：划线端点 v-hash/数字 ID 皆可，**想法端点只认数字 bookId**（v-hash 报 -2003，2026-11-20 实测）——任务为 v-hash 时从 bookDetail 页提取数字 ID；提取失败时降级为仅划线。
 `options.filename_template`：文件名模板（设置 export.naming；空 = 默认命名）。
 `options.layout`：排版参数（设置 export.font_size/export.page_margin，值 "default" = 引擎内置排版；engine/export_book.py PAGE_MARGINS）。
 `options.skip_crawl`：数据已在本地时跳过抓取直接导出（书库"重新导出"与断点续导的完成段使用）。
@@ -39,6 +39,7 @@
 - `{"cmd":"auth_check"}` → `auth.status`
 - `{"cmd":"book_info", "task_id":"...", "params":{"book_id":"..."}}` → `book.metadata` / `book.validation`
 - `{"cmd":"shelf_fetch", "task_id":"op-..."}` → `shelf.books` / `shelf.error`（书架一键导入；headless 提取 cookie → 纯 HTTP `GET /web/shelf/sync`；Rust op 路由终态 = 两者皆可）
+- `{"cmd":"notes_summary", "task_id":"op-...", "params":{"books":[{"id","review_id","title","author"}], "output_dir":...}}` → `notes.summary_progress` / `notes.summary_done` / `notes.summary_error`（书架划线汇总：逐本纯 HTTP 拉取划线/想法合并为一个 `划线汇总_时间戳.md`；`id` = 划线端点用 v-hash，`review_id` = 想法端点专用数字 bookId，title/author 为书架卡片兜底；书间可 cancel；Rust op 路由终态 = done/error 皆可）
 - `{"cmd":"logout"}` → 清除 profile 会话目录 → `auth.status`
 
 ## 3. 事件目录（worker → stdout）
@@ -54,8 +55,11 @@
 | `auth.expired` | `{}` | 会话失效 |
 | `book.metadata` | `book_id,title,author,intro,cover_url,cover_path` | 元数据抓取完成 |
 | `book.validation` | `ok, reason?` | 可访问性校验 |
-| `shelf.books` | `count, books:[{book_id,title,author,cover,book_hash}]` | 书架列表（book_hash = deepLink v-hash，导入/抓取用；数字 bookId 的 bookDetail 页 404） |
+| `shelf.books` | `count, books:[{book_id,title,author,cover,book_hash,group}]` | 书架列表（book_hash = deepLink v-hash，导入/抓取用；数字 bookId 的 bookDetail 页 404；group = 书架分组名，来自 `archive[]`，系统归档组不算，无分组为 ""） |
 | `shelf.error` | `code, user_message` | 书架获取失败（`LOGIN_REQUIRED` = 会话失效） |
+| `notes.summary_progress` | `done, total, title` | 划线汇总逐本进度 |
+| `notes.summary_done` | `file_path, file_size, books_ok, books_empty, total_highlights, total_reviews` | 汇总产物就绪 |
+| `notes.summary_error` | `code, user_message` | 汇总失败（`NO_BOOKS`/`LOGIN_REQUIRED`/`CANCELLED`/`NO_NOTES`/`NOTES_ERROR`） |
 | `task.started` | `total_chapters?` | 抓取/导出开始 |
 | `task.progress` | `stage`, `page`, `chapter_title`, `chapters_done`, `total_chapters`, `words`, `elapsed_sec` | 每页/每章（stage: `auth`/`metadata`/`crawl`/`images`/`render`/`notes`） |
 | `task.chapter_done` | `chapter_idx`, `title`, `words` | 章节落盘 |

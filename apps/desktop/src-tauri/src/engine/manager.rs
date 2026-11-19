@@ -318,6 +318,7 @@ fn terminal_events_of(cmd: &str) -> &'static [&'static str] {
         "book_info" => &["book.validation"],
         // shelf_fetch 两态都可能终局（登录失效走 shelf.error）
         "shelf_fetch" => &["shelf.books", "shelf.error"],
+        "notes_summary" => &["notes.summary_done", "notes.summary_error"],
         _ => &["engine.shutdown"],
     }
 }
@@ -718,6 +719,7 @@ mod tests {
         assert_eq!(terminal_events_of("login"), &["auth.status"]);
         assert_eq!(terminal_events_of("book_info"), &["book.validation"]);
         assert_eq!(terminal_events_of("shelf_fetch"), &["shelf.books", "shelf.error"]);
+        assert_eq!(terminal_events_of("notes_summary"), &["notes.summary_done", "notes.summary_error"]);
         assert_eq!(terminal_events_of("unknown-cmd"), &["engine.shutdown"]);
     }
 

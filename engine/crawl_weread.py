@@ -243,12 +243,16 @@ def parse_book_detail_html(html):
         m = re.search(r'"bookInfo":\{[^{}]*?"%s":"([^"]*)"' % key, html)
         return html_mod.unescape(m.group(1)).strip() if m else ""
 
+    # 页面数据里的数字 bookId（notes 想法端点 review/list 只认数字 ID，v-hash 报 -2003）
+    m = re.search(r'"bookInfo":\{[^{}]*?"bookId":\s*"?(\d{5,12})"?', html)
+
     return {
         "title": og("og:title"),
         "author": state_field("author"),
         "cover": og("og:image") or state_field("cover"),
         "intro": og("og:description"),
         "publisher": state_field("publisher"),
+        "numeric_id": m.group(1) if m else "",
     }
 
 
@@ -278,8 +282,19 @@ def book_hash_from_link(deep_link):
 
 
 def parse_shelf_response(data):
-    """从 shelf/sync 回包提取书籍卡片（纯函数）：bookId/标题/作者/封面/v-hash。
-    跳过缺 bookId 或标题的条目（文件夹/录音等非书条目天然被过滤）。"""
+    """从 shelf/sync 回包提取书籍卡片（纯函数）：bookId/标题/作者/封面/v-hash/分组。
+    跳过缺 bookId 或标题的条目（文件夹/录音等非书条目天然被过滤）。
+    分组取自回包 archive[]（{name, archiveId, bookIds[]}，bookIds 是从属权威来源，书条目无 archiveId）；
+    archiveId=1 是系统内置「归档」组（客户端把未分组书放进去承载），不算用户分组。"""
+    group_of = {}
+    for a in (data or {}).get("archive") or []:
+        if not isinstance(a, dict) or a.get("archiveId") == 1:
+            continue
+        name = (a.get("name") or "").strip()
+        if not name:
+            continue
+        for bid in a.get("bookIds") or []:
+            group_of[str(bid)] = name
     books = []
     for b in (data or {}).get("books") or []:
         book_id = str(b.get("bookId") or "").strip()
@@ -293,6 +308,8 @@ def parse_shelf_response(data):
             "cover": b.get("cover") or "",
             # bookDetail/抓取管线的真实 ID（deepLink v 参数）；缺失时前端回退 book_id
             "book_hash": book_hash_from_link(b.get("deepLink") or b.get("readerLink") or ""),
+            # 用户分组名（无分组账号/未分组书为 ""，前端据此走平铺视图）
+            "group": group_of.get(book_id, ""),
         })
     return books
 

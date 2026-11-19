@@ -241,6 +241,38 @@ def test_worker_mock_notes_task(tmp_path):
             proc.kill()
 
 
+def test_worker_mock_notes_summary():
+    proc = spawn_worker(mock=True)
+    reader = EventReader(proc)
+    try:
+        assert reader.next()["event"] == "engine.ready"
+        send(proc, {"protocol_version": 1, "cmd": "notes_summary", "task_id": "op-sum",
+                    "params": {"books": [{"id": "mockbook123"}, {"id": "mockbook456"}], "output_dir": "unused"}})
+        events = []
+        while True:
+            ev = reader.next()
+            events.append(ev)
+            if ev["event"] in ("notes.summary_done", "notes.summary_error"):
+                break
+        assert events[0]["event"] == "notes.summary_progress"
+        assert events[0]["data"]["total"] == 2
+        done = events[-1]
+        assert done["event"] == "notes.summary_done" and done["task_id"] == "op-sum"
+        assert done["data"]["books_ok"] == 2
+        assert done["data"]["total_highlights"] == 30 * 2
+
+        # 空书单 → 终态错误
+        send(proc, {"protocol_version": 1, "cmd": "notes_summary", "task_id": "op-sum2", "params": {}})
+        ev = reader.next()
+        assert ev["event"] == "notes.summary_error" and ev["data"]["code"] == "NO_BOOKS"
+
+        send(proc, {"protocol_version": 1, "cmd": "shutdown"})
+        proc.wait(timeout=10)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
 def test_worker_rejects_unknown_format():
     proc = spawn_worker(mock=True)
     reader = EventReader(proc)

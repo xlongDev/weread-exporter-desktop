@@ -322,6 +322,24 @@ def test_parse_shelf_response_empty_and_missing():
     assert crawl_weread.parse_shelf_response(None) == []
 
 
+def test_parse_shelf_response_groups_from_archive():
+    """archive[] bookIds 是分组权威来源；archiveId=1 系统「归档」组不算用户分组。"""
+    data = {
+        "books": [
+            {"bookId": "101", "title": "书A", "author": "", "cover": "", "deepLink": "https://weread.qq.com/book-detail?type=1&v=aaaa1111aaaa1111aaaa"},
+            {"bookId": "102", "title": "书B", "author": "", "cover": ""},
+            {"bookId": "103", "title": "书C", "author": "", "cover": ""},
+        ],
+        "archive": [
+            {"archiveId": 1, "name": "归档", "bookIds": ["101", "102"]},  # 系统组，应被忽略
+            {"archiveId": 7, "name": "小说", "bookIds": [102]},           # 数字 bookId 也能映射
+            {"archiveId": 8, "name": "", "bookIds": ["101"]},             # 空名组忽略
+        ],
+    }
+    books = crawl_weread.parse_shelf_response(data)
+    assert [b["group"] for b in books] == ["", "小说", ""]
+
+
 # ---------- fetch_shelf_http（mock urlopen，无真实网络） ----------
 
 class _FakeJsonResp:
@@ -342,7 +360,7 @@ def test_fetch_shelf_http_success(monkeypatch):
     ]
     books = crawl_weread.fetch_shelf_http(cookies)
     assert books == [{"book_id": "1", "title": "书", "author": "人", "cover": "",
-                      "book_hash": "abc123def456789"}]
+                      "book_hash": "abc123def456789", "group": ""}]
 
 
 def test_fetch_shelf_http_login_expired_returns_none(monkeypatch):

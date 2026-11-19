@@ -76,6 +76,25 @@ export interface ShelfItem {
   cover: string;
   /** bookDetail/抓取管线用的 v-hash（数字 bookId 的 bookDetail 页 404）；缺失时回退 book_id */
   book_hash: string;
+  /** 微信读书书架分组名（来自 shelf/sync archive[]；无分组/未分组为 ""，前端据此平铺） */
+  group?: string;
+}
+
+/** 引擎 notes.summary_progress 事件负载（书架划线汇总） */
+export interface NotesSummaryProgress {
+  done: number;
+  total: number;
+  title: string;
+}
+
+/** 引擎 notes.summary_done 事件负载（书架划线汇总产物） */
+export interface NotesSummaryDone {
+  file_path: string;
+  file_size: number;
+  books_ok: number;
+  books_empty: number;
+  total_highlights: number;
+  total_reviews: number;
 }
 
 /** 引擎 auth.status 事件负载 */

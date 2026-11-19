@@ -10,7 +10,7 @@ import { useTasks } from "../../stores/tasks";
 import { useAuth } from "../../stores/auth";
 import { extractBookId, extractBookIds, looksLikeBookId } from "../../utils/bookId";
 import { groupFiles, type ShelfBook } from "../../utils/shelf";
-import type { BookMeta, BookValidation, ExportFormat } from "../../types";
+import type { BookMeta, BookValidation, ExportFormat, NotesSummaryDone, NotesSummaryProgress, ShelfItem } from "../../types";
 import { Button } from "../../components/Button";
 import { BookCover } from "../../components/BookCover";
 import { StatusPill } from "../../components/StatusPill";
@@ -200,6 +200,75 @@ export function Export() {
     else void parseWithId(input);
   }
 
+  // ---- 划线汇总：书架所选书籍逐本拉取划线/想法，合并为一个 Markdown（不抓正文，纯 HTTP）----
+  const [summarizing, setSummarizing] = useState(false);
+  const [summaryOp, setSummaryOp] = useState<string | null>(null);
+
+  async function runNotesSummary(items: ShelfItem[]) {
+    setPhase("parsing");
+    setError(null);
+    setBatchSummary(null);
+    setSummarizing(true);
+    setBatchProgress({ done: 0, total: items.length });
+    let un: UnlistenFn | null = null;
+    try {
+      const result = await new Promise<NotesSummaryDone>((resolve, reject) => {
+        let opId: string | null = null;
+        let settled = false;
+        const finish = (err: string | null, data?: NotesSummaryDone) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          un?.();
+          if (err) reject(new Error(err));
+          else resolve(data as NotesSummaryDone);
+        };
+        const timer = window.setTimeout(() => finish("汇总超时（10 分钟），请稍后重试"), 600000);
+        void listen("engine://event", (event) => {
+          const ev = event.payload as { event?: string; task_id?: string; data?: Record<string, unknown> };
+          if (!ev?.event || !ev.task_id || ev.task_id !== opId) return;
+          if (ev.event === "notes.summary_progress") {
+            const p = ev.data as unknown as NotesSummaryProgress;
+            setBatchProgress({ done: p.done, total: p.total });
+          } else if (ev.event === "notes.summary_done") {
+            finish(null, ev.data as unknown as NotesSummaryDone);
+          } else if (ev.event === "notes.summary_error") {
+            finish((ev.data as { user_message?: string }).user_message || "划线汇总失败");
+          }
+        }).then((fn) => {
+          if (settled) fn();
+          else un = fn;
+        });
+        api
+          .startOp("notes_summary", {
+            books: items.map((b) => ({
+              id: b.book_hash || b.book_id,
+              review_id: b.book_id, // 想法端点只认数字 bookId
+              title: b.title,
+              author: b.author,
+            })),
+            output_dir: outputDir || undefined,
+          })
+          .then((id) => {
+            opId = id;
+            setSummaryOp(id);
+          })
+          .catch((e) => finish(toAppError(e).userMessage));
+      });
+      setBatchSummary([{
+        ok: true,
+        text: `划线汇总已生成：${result.file_path}（书 ${result.books_ok} 本 · 划线 ${result.total_highlights} 条 · 想法 ${result.total_reviews} 条${result.books_empty ? ` · 无笔记跳过 ${result.books_empty} 本` : ""}）`,
+      }]);
+    } catch (e) {
+      setBatchSummary([{ ok: false, text: toAppError(e).userMessage }]);
+    } finally {
+      setSummarizing(false);
+      setSummaryOp(null);
+      setBatchProgress(null);
+      setPhase("idle");
+    }
+  }
+
   async function parse() {
     dispatchParse(raw);
   }
@@ -358,7 +427,14 @@ export function Export() {
           </ul>
         )}
         {phase === "parsing" && (
-          <p className="text-sm text-faint">正在通过引擎获取书籍信息（需要启动浏览器，约数秒）…</p>
+          <p className="text-sm text-faint">
+            {summarizing ? "正在逐本拉取划线与想法（每书一次 HTTP，秒级）…" : "正在通过引擎获取书籍信息（需要启动浏览器，约数秒）…"}
+          </p>
+        )}
+        {summarizing && summaryOp && (
+          <Button variant="ghost" onClick={() => void api.cancelOp(summaryOp).catch(() => {})}>
+            取消汇总
+          </Button>
         )}
       </section>
 
@@ -495,9 +571,10 @@ export function Export() {
       <ShelfPicker
         open={shelfOpen}
         onClose={() => setShelfOpen(false)}
-        onConfirm={(ids) => {
+        onConfirm={(items, mode) => {
           setShelfOpen(false);
-          void runBatch(ids);
+          if (mode === "summary") void runNotesSummary(items);
+          else void runBatch(items.map((b) => b.book_hash || b.book_id));
         }}
       />
     </div>
