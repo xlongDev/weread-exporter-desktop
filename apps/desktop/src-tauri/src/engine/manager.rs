@@ -286,7 +286,7 @@ pub fn start_op<R: Runtime>(
 
     let stdout = worker.take_stdout()?;
     let op_id_owned = op_id.to_string();
-    let terminal = terminal_event_of(cmd).to_string();
+    let terminals = terminal_events_of(cmd);
     let app_ev = app.clone();
     let worker_for_route = worker.clone();
     thread::spawn(move || {
@@ -295,7 +295,7 @@ pub fn start_op<R: Runtime>(
             let Some(ev) = protocol::parse_line(&line) else { continue };
             let is_mine = ev.task_id.as_deref() == Some(op_id_owned.as_str());
             let _ = app_ev.emit("engine://event", &ev);
-            if is_mine && ev.event == terminal {
+            if is_mine && terminals.contains(&ev.event.as_str()) {
                 let _ = worker_for_route.send_line(&protocol::command_line("shutdown", None, None));
                 worker_for_route.close_and_wait_for_child();
                 if let Some(state) = app_ev.try_state::<AppState>()
@@ -312,11 +312,13 @@ pub fn start_op<R: Runtime>(
     Ok(())
 }
 
-fn terminal_event_of(cmd: &str) -> &'static str {
+fn terminal_events_of(cmd: &str) -> &'static [&'static str] {
     match cmd {
-        "auth_check" | "login" => "auth.status",
-        "book_info" => "book.validation",
-        _ => "engine.shutdown",
+        "auth_check" | "login" => &["auth.status"],
+        "book_info" => &["book.validation"],
+        // shelf_fetch 两态都可能终局（登录失效走 shelf.error）
+        "shelf_fetch" => &["shelf.books", "shelf.error"],
+        _ => &["engine.shutdown"],
     }
 }
 /// 启动一次真实任务执行（worker 生命周期 + 事件路由）。
@@ -708,6 +710,16 @@ pub fn test_conn() -> Connection {
 mod tests {
     use super::*;
     use std::sync::Mutex as StdMutex;
+
+    #[test]
+    fn terminal_events_cover_every_op() {
+        // 每个 op 命令都有终态集合（漏配 = worker 泄漏，shelf_fetch 曾中招）
+        assert_eq!(terminal_events_of("auth_check"), &["auth.status"]);
+        assert_eq!(terminal_events_of("login"), &["auth.status"]);
+        assert_eq!(terminal_events_of("book_info"), &["book.validation"]);
+        assert_eq!(terminal_events_of("shelf_fetch"), &["shelf.books", "shelf.error"]);
+        assert_eq!(terminal_events_of("unknown-cmd"), &["engine.shutdown"]);
+    }
 
     /// 所有派生 worker 的测试共享：进程级环境变量不可并行读写
     static ENV_LOCK: StdMutex<()> = StdMutex::new(());

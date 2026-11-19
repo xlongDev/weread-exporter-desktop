@@ -90,11 +90,11 @@ if [ ! -x "$PY_SENTINEL" ] || [ ! -f "$RES/.runtime-hash" ] || [ "$(cat "$RES/.r
   echo "$RUNTIME_HASH" > "$RES/.runtime-hash"
 fi
 
-# 3) 引擎源码副本
-mkdir -p "$RES/engine/adapter"
-cp "$ROOT/engine/crawl_weread.py" "$ROOT/engine/export_book.py" "$ROOT/engine/main.py" \
-   "$ROOT/engine/protocol.py" "$ROOT/engine/__init__.py" "$RES/engine/"
-cp "$ROOT/engine/adapter/worker.py" "$ROOT/engine/adapter/__init__.py" "$RES/engine/adapter/"
+# 3) 引擎源码副本（整目录同步：新增模块自动进包，勿用文件清单——notes.py 曾因此漏打包）
+rm -rf "$RES/engine"
+cp -R "$ROOT/engine" "$RES/engine"
+find "$RES/engine" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+rm -rf "$RES/engine/tests"
 # 恢复 tauri-build 校验用的占位文件（脚本整目录重建会抹掉它们；CI 新鲜 checkout 依赖）
 printf '构建占位：真实资源由 scripts/prepare-runtime.sh 在打包前组装（见 docs/03）。\n' > "$RES/engine/.placeholder"
 mkdir -p "$RES/runtime"

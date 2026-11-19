@@ -7,8 +7,8 @@ import type { ShelfItem } from "../../types";
 import { Dialog } from "../../components/Dialog";
 import { Button } from "../../components/Button";
 
-/** 发起 shelf_fetch op 并等待终态 shelf.books / shelf.error（90s 超时兜底 worker 崩溃） */
-function fetchShelfViaOp(): Promise<ShelfItem[]> {
+/** 发起 shelf_fetch op 并等待终态 shelf.books / shelf.error（60s 超时兜底 worker 崩溃） */
+function fetchShelfViaOp(): Promise<{ opId: string; books: ShelfItem[] }> {
   return new Promise((resolve, reject) => {
     let opId: string | null = null;
     let meta: ShelfItem[] | null = null;
@@ -20,10 +20,10 @@ function fetchShelfViaOp(): Promise<ShelfItem[]> {
       window.clearTimeout(timer);
       un?.();
       if (err) reject(new Error(err));
-      else resolve(meta as ShelfItem[]);
+      else resolve({ opId: opId as string, books: meta as ShelfItem[] });
     };
     let errText: string | null = null;
-    const timer = window.setTimeout(() => finish(errText || "获取书架超时，请重试"), 90000);
+    const timer = window.setTimeout(() => finish(errText || "获取书架超时，请重试"), 60000);
     void listen("engine://event", (event) => {
       const ev = event.payload as { event?: string; task_id?: string; data?: Record<string, unknown> };
       if (!ev?.event || !ev.task_id || ev.task_id !== opId) return;
@@ -62,6 +62,7 @@ export function ShelfPicker({
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [opId, setOpId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -71,8 +72,9 @@ export function ShelfPicker({
     setQuery("");
     let alive = true;
     fetchShelfViaOp()
-      .then((b) => {
+      .then(({ opId: id, books: b }) => {
         if (!alive) return;
+        setOpId(id);
         setBooks(b);
         setPhase("ready");
       })
@@ -86,6 +88,13 @@ export function ShelfPicker({
     };
   }, [open]);
 
+  // 关闭时取消后台 op（浏览器启动等慢路径不留悬挂进程）
+  function close() {
+    if (opId) void api.cancelOp(opId).catch(() => {});
+    setOpId(null);
+    onClose();
+  }
+
   const shown = filterShelfItems(books, query);
   const selectedIds = [...selected];
 
@@ -98,14 +107,16 @@ export function ShelfPicker({
     });
   }
 
+  if (!open) return null; // 必须门控渲染：否则关闭态也会画 Dialog（启动即弹、取消无效的根因）
+
   return (
     <Dialog
       title="从书架导入"
       wide
-      onClose={onClose}
+      onClose={close}
       actions={
         <>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={close}>取消</Button>
           <Button
             variant="primary"
             disabled={selectedIds.length === 0}
