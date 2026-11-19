@@ -7,6 +7,7 @@ import { BookCover } from "../../components/BookCover";
 import { Dialog } from "../../components/Dialog";
 import { Drawer } from "../../components/Drawer";
 import { StatusPill, type PillTone } from "../../components/StatusPill";
+import { t, useT } from "../../i18n";
 
 const STATUS_TONE: Record<TaskRow["status"], PillTone> = {
   waiting: "neutral",
@@ -16,13 +17,14 @@ const STATUS_TONE: Record<TaskRow["status"], PillTone> = {
   failed: "negative",
 };
 
-const STATUS_LABEL: Record<TaskRow["status"], string> = {
+const STATUS_LABEL_KEY: Record<TaskRow["status"], string> = {
   waiting: "等待中",
   running: "执行中",
   completed: "已完成",
   cancelled: "已取消",
   failed: "失败",
 };
+const statusLabel = (s: TaskRow["status"]) => t(STATUS_LABEL_KEY[s]);
 
 export const FORMAT_LABEL: Record<string, string> = {
   pdf: "PDF",
@@ -30,26 +32,27 @@ export const FORMAT_LABEL: Record<string, string> = {
   markdown: "Markdown",
   notes: "笔记",
 };
+export const formatLabel = (f: string) => t(FORMAT_LABEL[f] ?? f);
 
 /** 进度百分比的诚实且可读形态：<1% 保留一位小数，≥1% 取整（0.5% / 8% / 57%，不出 16 位浮点尾巴） */
 export function fmtProgress(p: number): string {
   return p > 0 && p < 1 ? p.toFixed(1) : String(Math.round(p));
 }
 
+const STAGE_LABEL_KEY: Record<string, string> = {
+  auth: "等待登录",
+  metadata: "读取书籍信息",
+  crawl: "抓取正文",
+  images: "下载插图",
+  render: "生成文件",
+  notes: "拉取划线与想法",
+};
 export function stageLabel(stage: string): string {
-  const map: Record<string, string> = {
-    auth: "等待登录",
-    metadata: "读取书籍信息",
-    crawl: "抓取正文",
-    images: "下载插图",
-    render: "生成文件",
-    notes: "拉取划线与想法",
-  };
-  return map[stage] ?? stage;
+  return stage in STAGE_LABEL_KEY ? t(STAGE_LABEL_KEY[stage]) : stage;
 }
 
 function formatWords(n: number): string {
-  return n >= 10000 ? `${(n / 10000).toFixed(1)} 万字` : `${n} 字`;
+  return n >= 10000 ? t("{n} 万字", { n: (n / 10000).toFixed(1) }) : t("{n} 字", { n });
 }
 
 function elapsedText(startedAt: string | null, finishedAt: string | null): string {
@@ -60,7 +63,7 @@ function elapsedText(startedAt: string | null, finishedAt: string | null): strin
   const sec = Math.max(0, Math.floor((end - start) / 1000));
   const m = Math.floor(sec / 60);
   const s = sec % 60;
-  return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+  return m > 0 ? t("{m} 分 {s} 秒", { m, s }) : t("{s} 秒", { s });
 }
 
 /** current_chapter 是章节标题；引擎偶发传纯数字（如 "0"），显示出来就是孤立的 "· 0" —— 过滤 */
@@ -102,6 +105,7 @@ function groupTasks(tasks: TaskRow[]): TaskGroup[] {
 
 /** 任务列表：按书分组，行内取消/删除/定位 + 详情抽屉（docs/04 §4.3），由任务 dock 面板复用 */
 export function TaskList({ tasks, onChanged }: { tasks: TaskRow[]; onChanged: () => void }) {
+  const t = useT();
   const [detailId, setDetailId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TaskRow | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -128,7 +132,7 @@ export function TaskList({ tasks, onChanged }: { tasks: TaskRow[]; onChanged: ()
       </div>
       {pendingDelete && (
         <Dialog
-          title="删除这条任务记录？"
+          title={t("删除这条任务记录？")}
           onClose={() => {
             setPendingDelete(null);
             setDeleteError(null);
@@ -142,9 +146,9 @@ export function TaskList({ tasks, onChanged }: { tasks: TaskRow[]; onChanged: ()
                   setDeleteError(null);
                 }}
               >
-                取消
+                {t("取消")}
               </Button>
-              <Button onClick={() => void confirmDelete()}>删除记录</Button>
+              <Button onClick={() => void confirmDelete()}>{t("删除记录")}</Button>
             </>
           }
         >
@@ -153,7 +157,7 @@ export function TaskList({ tasks, onChanged }: { tasks: TaskRow[]; onChanged: ()
             {FORMAT_LABEL[pendingDelete.format] ?? pendingDelete.format}）
           </p>
           <p className="text-xs text-faint">
-            仅删除记录与断点续传进度；磁盘上的导出文件与书库不受影响。
+            {t("仅删除记录与断点续传进度；磁盘上的导出文件与书库不受影响。")}
           </p>
           {deleteError && <p className="text-sm text-negative-text">{deleteError}</p>}
         </Dialog>
@@ -198,22 +202,22 @@ function StatusGlyph({ status }: { status: TaskRow["status"] }) {
   switch (status) {
     case "running":
       return (
-        <span className="flex w-3.5 flex-none items-center justify-center" aria-label={STATUS_LABEL[status]}>
+        <span className="flex w-3.5 flex-none items-center justify-center" aria-label={statusLabel(status)}>
           <span className="block size-1.5 rounded-full bg-data" aria-hidden="true" />
         </span>
       );
     case "waiting":
       return (
-        <span className="flex w-3.5 flex-none items-center justify-center" aria-label={STATUS_LABEL[status]}>
+        <span className="flex w-3.5 flex-none items-center justify-center" aria-label={statusLabel(status)}>
           <span className="block size-1.5 rounded-full border border-faint" aria-hidden="true" />
         </span>
       );
     case "completed":
-      return <Check size={12} strokeWidth={2} className="flex-none text-positive" aria-label={STATUS_LABEL[status]} />;
+      return <Check size={12} strokeWidth={2} className="flex-none text-positive" aria-label={statusLabel(status)} />;
     case "failed":
-      return <X size={12} strokeWidth={2} className="flex-none text-negative" aria-label={STATUS_LABEL[status]} />;
+      return <X size={12} strokeWidth={2} className="flex-none text-negative" aria-label={statusLabel(status)} />;
     case "cancelled":
-      return <Minus size={12} strokeWidth={2} className="flex-none text-faint" aria-label={STATUS_LABEL[status]} />;
+      return <Minus size={12} strokeWidth={2} className="flex-none text-faint" aria-label={statusLabel(status)} />;
   }
 }
 
@@ -226,6 +230,7 @@ function FormatRow({
   onOpen: () => void;
   onDelete: () => void;
 }) {
+  const t = useT();
   const [, setTick] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -261,7 +266,7 @@ function FormatRow({
       <button
         onClick={onOpen}
         className="min-w-0 flex-1 text-left"
-        aria-label={`查看任务详情：${task.title || task.book_id}`}
+        aria-label={t("查看任务详情：{title}", { title: task.title || task.book_id })}
       >
         {task.status === "running" && (
           <span className="flex flex-col gap-1">
@@ -274,29 +279,29 @@ function FormatRow({
             <span className="tnum truncate text-xs text-muted">
               {stageLabel(task.current_stage)}
               {chapterSuffix(task.current_chapter)}
-              {task.chapters_done > 0 && ` · 已完成 ${task.chapters_done}${task.total_chapters ? `/${task.total_chapters}` : ""} 章`}
-              {task.pages_done > 0 && ` · ${task.pages_done} 页`}
+              {task.chapters_done > 0 && ` · ${t("已完成 {done}/{total} 章", { done: task.chapters_done, total: task.total_chapters ?? "" })}`}
+              {task.pages_done > 0 && ` · ${t("{n} 页", { n: task.pages_done })}`}
               {task.words_done > 0 && ` · ${formatWords(task.words_done)}`}
-              {` · 已用时 ${elapsedText(task.started_at, null)}`}
+              {` · ${t("已用时 {time}", { time: elapsedText(task.started_at, null) })}`}
             </span>
           </span>
         )}
         {task.status === "waiting" && (
-          <span className="text-xs text-muted">排队等待中</span>
+          <span className="text-xs text-muted">{t("排队等待中")}</span>
         )}
         {task.status === "failed" && (
           <span className="truncate text-xs text-negative-text">
-            {task.error_message ?? "任务失败"}
+            {task.error_message ?? t("任务失败")}
             {task.error_code && `（${task.error_code}）`}
           </span>
         )}
         {task.status === "completed" && (
           <span className="tnum truncate text-xs text-muted">
-            已完成 · 用时 {elapsedText(task.started_at, task.finished_at)}
+            {t("已完成 · 用时 {time}", { time: elapsedText(task.started_at, task.finished_at) })}
           </span>
         )}
         {task.status === "cancelled" && (
-          <span className="text-xs text-faint">已取消</span>
+          <span className="text-xs text-faint">{t("已取消")}</span>
         )}
       </button>
 
@@ -304,19 +309,19 @@ function FormatRow({
 
       <div className="flex flex-none items-center gap-1.5">
         {(task.status === "running" || task.status === "waiting") && (
-          <Button variant="ghost" onClick={() => void cancel()} aria-label="取消任务">
+          <Button variant="ghost" onClick={() => void cancel()} aria-label={t("取消任务")}>
             <X size={14} strokeWidth={1.5} aria-hidden="true" />
-            取消
+            {t("取消")}
           </Button>
         )}
         {task.status === "completed" && (
-          <Button variant="ghost" onClick={() => void reveal()} aria-label="打开输出文件夹">
+          <Button variant="ghost" onClick={() => void reveal()} aria-label={t("打开输出文件夹")}>
             <FolderOpen size={14} strokeWidth={1.5} aria-hidden="true" />
-            文件夹
+            {t("文件夹")}
           </Button>
         )}
         {(task.status === "completed" || task.status === "failed" || task.status === "cancelled") && (
-          <Button variant="ghost" onClick={onDelete} aria-label="删除记录" title="删除记录">
+          <Button variant="ghost" onClick={onDelete} aria-label={t("删除记录")} title={t("删除记录")}>
             <Trash2 size={14} strokeWidth={1.5} aria-hidden="true" />
           </Button>
         )}
@@ -375,11 +380,12 @@ function TaskDetailDrawer({
     }
   }
 
+  const t = useT();
   const resumable = detail && (detail.status === "failed" || detail.status === "cancelled");
 
   return (
     <Drawer
-      title="任务详情"
+      title={t("任务详情")}
       onClose={onClose}
       footer={
         resumable && detail ? (
@@ -388,14 +394,14 @@ function TaskDetailDrawer({
               variant="primary"
               onClick={() => void resume(detail.status === "failed" ? "retry" : "resume")}
             >
-              {detail.status === "failed" ? "重试任务" : "继续导出"}
+              {detail.status === "failed" ? t("重试任务") : t("继续导出")}
             </Button>
-            <p className="text-xs text-faint">新任务会复用已落盘的章节，从断点之后继续。</p>
+            <p className="text-xs text-faint">{t("新任务会复用已落盘的章节，从断点之后继续。")}</p>
           </div>
         ) : undefined
       }
     >
-      {!detail && !error && <p className="text-sm text-faint">读取中…</p>}
+      {!detail && !error && <p className="text-sm text-faint">{t("读取中…")}</p>}
       {error && <p className="text-sm text-negative-text">{error}</p>}
       {detail && (
         <div className="flex flex-col gap-4">
@@ -405,25 +411,25 @@ function TaskDetailDrawer({
               <span className="truncate text-sm font-medium">{detail.title || detail.book_id}</span>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-faint">{FORMAT_LABEL[detail.format] ?? detail.format}</span>
-                <StatusPill tone={STATUS_TONE[detail.status]}>{STATUS_LABEL[detail.status]}</StatusPill>
+                <StatusPill tone={STATUS_TONE[detail.status]}>{statusLabel(detail.status)}</StatusPill>
               </div>
             </div>
           </div>
 
           <dl className="flex flex-col gap-2 text-sm">
-            <DetailRow label="阶段">{stageLabel(detail.current_stage) || "—"}</DetailRow>
-            <DetailRow label="当前章节">{detail.current_chapter || "—"}</DetailRow>
-            <DetailRow label="进度">
-              {detail.chapters_done > 0 ? `${detail.chapters_done}${detail.total_chapters ? `/${detail.total_chapters}` : ""} 章` : "—"}
-              {detail.pages_done > 0 && ` · ${detail.pages_done} 页`}
+            <DetailRow label={t("阶段")}>{stageLabel(detail.current_stage) || "—"}</DetailRow>
+            <DetailRow label={t("当前章节")}>{detail.current_chapter || "—"}</DetailRow>
+            <DetailRow label={t("进度")}>
+              {detail.chapters_done > 0 ? `${detail.chapters_done}${detail.total_chapters ? `/${detail.total_chapters}` : ""} ${t("章")}` : "—"}
+              {detail.pages_done > 0 && ` · ${t("{n} 页", { n: detail.pages_done })}`}
               {detail.words_done > 0 && ` · ${formatWords(detail.words_done)}`}
             </DetailRow>
-            <DetailRow label="已耗时">{elapsedText(detail.started_at, detail.finished_at)}</DetailRow>
-            <DetailRow label="输出目录">
+            <DetailRow label={t("已耗时")}>{elapsedText(detail.started_at, detail.finished_at)}</DetailRow>
+            <DetailRow label={t("输出目录")}>
               <span className="selectable break-all">{detail.output_dir}</span>
             </DetailRow>
             {detail.status === "failed" && (
-              <DetailRow label="失败原因">
+              <DetailRow label={t("失败原因")}>
                 <span className="text-negative">{detail.error_message ?? "—"}</span>
                 {detail.error_code && <span className="text-faint">（{detail.error_code}）</span>}
               </DetailRow>
@@ -432,18 +438,18 @@ function TaskDetailDrawer({
 
           {detail.chapters.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">章节进度（断点依据）</span>
+              <span className="text-sm font-medium">{t("章节进度（断点依据）")}</span>
               <ul className="flex max-h-56 flex-col gap-1 overflow-y-auto rounded-card bg-[var(--well)] p-3">
                 {detail.chapters.map((c) => (
                   <li key={c.chapter_idx} className="flex items-center gap-2 text-xs">
                     {c.status === "done" ? (
-                      <Check size={12} strokeWidth={2} className="flex-none text-positive" aria-label="已完成" />
+                      <Check size={12} strokeWidth={2} className="flex-none text-positive" aria-label={t("已完成")} />
                     ) : c.status === "failed" ? (
-                      <X size={12} strokeWidth={2} className="flex-none text-negative" aria-label="失败" />
+                      <X size={12} strokeWidth={2} className="flex-none text-negative" aria-label={t("失败")} />
                     ) : (
-                      <Minus size={12} strokeWidth={2} className="flex-none text-faint" aria-label="待处理" />
+                      <Minus size={12} strokeWidth={2} className="flex-none text-faint" aria-label={t("待处理")} />
                     )}
-                    <span className="truncate text-muted">{c.title || `章节 ${c.chapter_idx}`}</span>
+                    <span className="truncate text-muted">{c.title || t("章节 {n}", { n: c.chapter_idx })}</span>
                   </li>
                 ))}
               </ul>
@@ -454,10 +460,10 @@ function TaskDetailDrawer({
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => void revealLog()}>
-              任务日志
+              {t("任务日志")}
             </Button>
             {detail.status === "completed" && (
-              <Button onClick={() => void revealDir()}>打开文件夹</Button>
+              <Button onClick={() => void revealDir()}>{t("打开文件夹")}</Button>
             )}
           </div>
         </div>

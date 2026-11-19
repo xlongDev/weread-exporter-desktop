@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { t } from "../i18n";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 /**
@@ -25,7 +26,7 @@ export function BookCover({
         src={convertFileSrc(path)}
         width={fill ? undefined : width}
         height={fill ? undefined : height}
-        alt={`《${title}》封面`}
+        alt={t("《{title}》封面", { title })}
         loading="lazy"
         onError={() => setFailed(true)}
         className={
@@ -48,10 +49,10 @@ export function BookCover({
     >
       {fill ? (
         <span className="font-serif text-3xl text-muted [writing-mode:vertical-rl]">
-          {title.slice(0, 2) || "书"}
+          {title.slice(0, 2) || t("书")}
         </span>
       ) : (
-        <span className="font-serif text-xl text-muted">{title.slice(0, 1) || "书"}</span>
+        <span className="font-serif text-xl text-muted">{title.slice(0, 1) || t("书")}</span>
       )}
     </div>
   );

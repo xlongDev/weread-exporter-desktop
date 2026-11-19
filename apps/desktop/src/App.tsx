@@ -23,11 +23,12 @@ function CurrentPage() {
 }
 
 export default function App() {
-  // 启动时：引擎握手 + 事件流订阅 + 登录态检查
+  // 启动时：引擎握手 + 事件流订阅 + 登录态检查 + 设置载入（语言/输出目录默认值依赖）
   useEffect(() => {
     void useEngine.getState().refresh();
     void initEngineListener();
     void initAuthListener().then(() => useAuth.getState().check());
+    void useSettings.getState().load();
   }, []);
 
   // 系统主题变化时按当前模式重算（mode=system 需要）

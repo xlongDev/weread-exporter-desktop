@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { api, toAppError } from "../services/api";
 import type { AuthStatusData } from "../types";
+import { t } from "../i18n";
 
 export type AuthStatus = "unknown" | "checking" | "in" | "out";
 
@@ -83,9 +84,9 @@ export async function initAuthListener(): Promise<void> {
         loginOpId: null,
         status: data.logged_in ? "in" : "out",
         lastError: data.error
-          ? `登录检查失败：${data.error}`
+          ? t("登录检查失败：{msg}", { msg: data.error })
           : data.reason === "timeout"
-            ? "扫码超时，请重试"
+            ? t("扫码超时，请重试")
             : data.cancelled
               ? null
               : null,

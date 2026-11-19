@@ -31,8 +31,8 @@ export const api = {
   importBook: (b: { bookId: string; title: string; author: string; intro: string; coverPath: string }) =>
     invoke<void>("import_book", b),
   listTasks: (limit = 50) => invoke<TaskRow[]>("list_tasks", { limit }),
-  createTask: (bookId: string, format: string, outputDir?: string, resumedFrom?: number) =>
-    invoke<number>("create_task", { bookId, format, outputDir, resumedFrom }),
+  createTask: (bookId: string, format: string, outputDir?: string, resumedFrom?: number, force?: boolean) =>
+    invoke<number>("create_task", { bookId, format, outputDir, resumedFrom, force }),
   cancelTask: (taskId: number) => invoke<void>("cancel_task", { taskId }),
   revealTaskDir: (taskId: number) => invoke<void>("reveal_task_dir", { taskId }),
   revealTaskLog: (taskId: number) => invoke<void>("reveal_task_log", { taskId }),

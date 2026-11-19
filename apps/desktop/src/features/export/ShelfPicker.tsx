@@ -5,6 +5,7 @@ import { api, toAppError } from "../../services/api";
 import { filterShelfItems } from "../../utils/shelf";
 import type { ShelfItem } from "../../types";
 import { Dialog } from "../../components/Dialog";
+import { t, useT } from "../../i18n";
 import { Button } from "../../components/Button";
 
 /** 发起 shelf_fetch op 并等待终态 shelf.books / shelf.error（60s 超时兜底 worker 崩溃） */
@@ -23,7 +24,7 @@ function fetchShelfViaOp(): Promise<{ opId: string; books: ShelfItem[] }> {
       else resolve({ opId: opId as string, books: meta as ShelfItem[] });
     };
     let errText: string | null = null;
-    const timer = window.setTimeout(() => finish(errText || "获取书架超时，请重试"), 60000);
+    const timer = window.setTimeout(() => finish(errText || t("获取书架超时，请重试")), 60000);
     void listen("engine://event", (event) => {
       const ev = event.payload as { event?: string; task_id?: string; data?: Record<string, unknown> };
       if (!ev?.event || !ev.task_id || ev.task_id !== opId) return;
@@ -31,7 +32,7 @@ function fetchShelfViaOp(): Promise<{ opId: string; books: ShelfItem[] }> {
         meta = ((ev.data as { books?: ShelfItem[] }).books ?? []) as ShelfItem[];
         finish(null);
       } else if (ev.event === "shelf.error") {
-        errText = (ev.data as { user_message?: string }).user_message || "书架获取失败";
+        errText = (ev.data as { user_message?: string }).user_message || t("书架获取失败");
         finish(errText);
       }
     }).then((fn) => {
@@ -58,6 +59,7 @@ export function ShelfPicker({
   /** 整卡回传：book_hash（抓取管线真实 ID）与 book_id（数字 ID，notes 想法端点专用）由调用方各取所需 */
   onConfirm: (items: ShelfItem[], mode: "export" | "summary") => void;
 }) {
+  const t = useT();
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [books, setBooks] = useState<ShelfItem[]>([]);
   const [error, setError] = useState("");
@@ -202,31 +204,31 @@ export function ShelfPicker({
 
   return (
     <Dialog
-      title="从书架导入"
+      title={t("从书架导入")}
       wide
       onClose={close}
       actions={
         <>
-          <Button onClick={close}>取消</Button>
+          <Button onClick={close}>{t("取消")}</Button>
           <Button
             variant="secondary"
             disabled={selectedIds.length === 0}
             onClick={() => confirmSelected("summary")}
           >
-            汇总划线（{selectedIds.length}）
+            {t("汇总划线（{n}）", { n: selectedIds.length })}
           </Button>
           <Button
             variant="primary"
             disabled={selectedIds.length === 0}
             onClick={() => confirmSelected("export")}
           >
-            导出所选（{selectedIds.length}）
+            {t("导出所选（{n}）", { n: selectedIds.length })}
           </Button>
         </>
       }
     >
       {phase === "loading" && (
-        <p className="py-8 text-center text-sm text-faint">正在拉取书架（需要启动浏览器，约数秒）…</p>
+        <p className="py-8 text-center text-sm text-faint">{t("正在拉取书架（需要启动浏览器，约数秒）…")}</p>
       )}
       {phase === "error" && <p className="text-sm text-negative-text">{error}</p>}
       {phase === "ready" && (
@@ -236,15 +238,15 @@ export function ShelfPicker({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索书名或作者"
+              placeholder={t("搜索书名或作者")}
               spellCheck={false}
               className="input-glass h-9 flex-1 rounded-full px-4 text-sm text-ink placeholder:text-faint"
-              aria-label="搜索书架"
+              aria-label={t("搜索书架")}
             />
           </div>
           {shown.length === 0 ? (
             <p className="py-8 text-center text-sm text-faint">
-              {books.length === 0 ? "书架为空，或该账号没有同步书籍。" : "没有匹配的书籍。"}
+              {books.length === 0 ? t("书架为空，或该账号没有同步书籍。") : t("没有匹配的书籍。")}
             </p>
           ) : !hasGroups ? (
             <>
@@ -252,8 +254,8 @@ export function ShelfPicker({
                 {shown.map((b) => card(b))}
               </div>
               <p className="text-xs text-faint">
-                共 {books.length} 本{query && shown.length !== books.length ? `，匹配 ${shown.length} 本` : ""}。
-                确认后逐本获取信息并按所选格式入队（与批量粘贴同一流程）。
+                {t("共 {n} 本{matched}。", { n: books.length, matched: query && shown.length !== books.length ? t("，匹配 {n} 本", { n: shown.length }) : "" })}
+                {t("确认后逐本获取信息并按所选格式入队（与批量粘贴同一流程）。")}
               </p>
             </>
           ) : (
@@ -263,12 +265,12 @@ export function ShelfPicker({
                   <div key={name} className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-ink">{name}</span>
-                      <span className="tnum text-xs text-faint">{items.length} 本</span>
+                      <span className="tnum text-xs text-faint">{t("{n} 本", { n: items.length })}</span>
                       <button
                         onClick={() => toggleGroup(items)}
                         className="text-xs text-muted underline-offset-2 hover:text-ink hover:underline"
                       >
-                        {items.every((b) => selected.has(b.book_id)) ? "清空" : "全选"}
+                        {items.every((b) => selected.has(b.book_id)) ? t("清空") : t("全选")}
                       </button>
                     </div>
                     <div className="grid grid-cols-4 gap-x-4 gap-y-5 sm:grid-cols-5 md:grid-cols-6">
@@ -278,8 +280,8 @@ export function ShelfPicker({
                 ))}
               </div>
               <p className="text-xs text-faint">
-                共 {books.length} 本{query && shown.length !== books.length ? `，匹配 ${shown.length} 本` : ""}。
-                「导出所选」逐本获取信息并按所选格式入队；「汇总划线」不抓正文，仅逐本拉取划线与想法合并为一个 Markdown。
+                {t("共 {n} 本{matched}。", { n: books.length, matched: query && shown.length !== books.length ? t("，匹配 {n} 本", { n: shown.length }) : "" })}
+                {t("「导出所选」逐本获取信息并按所选格式入队；「汇总划线」不抓正文，仅逐本拉取划线与想法合并为一个 Markdown。")}
               </p>
             </>
           )}

@@ -175,6 +175,7 @@ pub fn create_task(
     format: String,
     output_dir: Option<String>,
     resumed_from: Option<i64>,
+    force: Option<bool>,
 ) -> Result<i64, String> {
     if !valid_book_id(&book_id) {
         return Err("书籍 ID 格式无效".into());
@@ -195,8 +196,13 @@ pub fn create_task(
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建输出目录失败: {e}"))?;
 
     // 文件名模板（export.naming，空 = 引擎默认命名）与排版参数（字号/页边距，
-    // 值为 "default" 或空串 = 引擎默认排版）：随任务参数传给引擎
+    // 值为 "default" 或空串 = 引擎默认排版）：随任务参数传给引擎；
+    // force = 连载书增量更新（书库「更新导出」）：跳过「已完整抓取直接复用」，
+    // 开目录比对——有新章节从断点续抓，无更新秒级完成
     let mut options = serde_json::json!({});
+    if force.unwrap_or(false) {
+        options["force"] = Value::Bool(true);
+    }
     {
         let conn = state.db.lock().map_err(lock_err)?;
         let settings = read_settings(&conn)?;

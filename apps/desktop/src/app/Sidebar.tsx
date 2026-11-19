@@ -3,19 +3,13 @@ import { getVersion } from "@tauri-apps/api/app";
 import { BookOpen, LibraryBig, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
 import { useNav, type Page } from "../stores/nav";
 import { useAuth, type AuthStatus } from "../stores/auth";
+import { useT } from "../i18n";
 
 const NAV: { key: Page; label: string; icon: typeof BookOpen }[] = [
   { key: "export", label: "导出书籍", icon: BookOpen },
   { key: "library", label: "书库", icon: LibraryBig },
   { key: "settings", label: "设置", icon: Settings2 },
 ];
-
-const AUTH_STATUS_LABEL: Record<AuthStatus, string> = {
-  unknown: "检查中…",
-  checking: "检查中…",
-  in: "已登录",
-  out: "未登录",
-};
 
 const COLLAPSE_KEY = "wr.sidebar.collapsed";
 
@@ -25,8 +19,15 @@ export function Sidebar() {
   const page = useNav((s) => s.page);
   const goto = useNav((s) => s.goto);
   const authStatus = useAuth((s) => s.status);
+  const t = useT();
   const [version, setVersion] = useState("");
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
+  const authLabel: Record<AuthStatus, string> = {
+    unknown: t("检查中…"),
+    checking: t("检查中…"),
+    in: t("已登录"),
+    out: t("未登录"),
+  };
 
   useEffect(() => {
     void getVersion().then(setVersion).catch(() => {});
@@ -85,7 +86,7 @@ export function Sidebar() {
             WeRead Exporter
           </span>
           <span data-tauri-drag-region className="block whitespace-nowrap text-xs text-muted">
-            微信读书电子书导出
+            {t("微信读书电子书导出")}
           </span>
         </div>
       </div>
@@ -94,19 +95,20 @@ export function Sidebar() {
     <nav className="flex flex-col gap-0.5 px-3" aria-label="主导航">
         {NAV.map(({ key, label, icon: Icon }) => {
           const active = page === key;
+          const text = t(label);
           return (
             <button
               key={key}
               onClick={() => goto(key)}
-              aria-label={label}
+              aria-label={text}
               aria-current={active ? "page" : undefined}
-              title={collapsed ? label : undefined}
+              title={collapsed ? text : undefined}
               className={`flex h-8 items-center rounded-full text-sm transition-[background-color,color,width] duration-200 ${
                 collapsed ? "w-9 justify-center self-center" : "w-full gap-2.5 px-3"
               } ${active ? "bg-raised text-ink" : "text-muted hover:bg-raised/60 hover:text-ink"}`}
             >
               <Icon size={16} strokeWidth={1.5} aria-hidden="true" />
-              <span className={labelMotion}>{label}</span>
+              <span className={labelMotion}>{text}</span>
             </button>
           );
         })}
@@ -122,14 +124,14 @@ export function Sidebar() {
             aria-hidden="true"
             className={`size-1.5 flex-none rounded-full ${authStatus === "in" ? "bg-positive" : "bg-faint"}`}
           />
-          <span className={labelMotion}>微信读书账号 · {AUTH_STATUS_LABEL[authStatus]}</span>
+          <span className={labelMotion}>{t("微信读书账号")} · {authLabel[authStatus]}</span>
         </p>
         <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
           <span className={`tnum text-xs text-faint ${labelMotion}`}>{version && `v${version}`}</span>
           <button
             onClick={toggle}
-            aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
-            title={collapsed ? "展开侧栏 (⌘B)" : "折叠侧栏 (⌘B)"}
+            aria-label={collapsed ? t("展开侧栏") : t("折叠侧栏")}
+            title={collapsed ? t("展开侧栏 (⌘B)") : t("折叠侧栏 (⌘B)")}
             className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-faint transition-colors hover:bg-raised hover:text-ink"
           >
             {collapsed ? (

@@ -15,9 +15,11 @@ import { Button } from "../../components/Button";
 import { BookCover } from "../../components/BookCover";
 import { StatusPill } from "../../components/StatusPill";
 import { ShelfPicker } from "./ShelfPicker";
+import { useT } from "../../i18n";
 
 type ParsePhase = "idle" | "parsing" | "ready" | "error";
 
+// 格式名/提示保持中文原文，渲染时经 t() 翻译（en 字典缺失时回退中文）
 const FORMATS: { key: ExportFormat; name: string; hint: string }[] = [
   { key: "pdf", name: "精排 PDF", hint: "适合 iPad 批注与打印" },
   { key: "epub", name: "EPUB", hint: "适合 Apple Books / Kindle" },
@@ -65,6 +67,7 @@ function fetchBookViaOp(bookId: string): Promise<{ meta: BookMeta; validation: B
 
 /** 导出书籍：单页流程 —— 粘贴链接 → 获取 → 开始导出（默认全格式、默认目录） */
 export function Export() {
+  const t = useT();
   const [raw, setRaw] = useState("");
   const [phase, setPhase] = useState<ParsePhase>("idle");
   const [meta, setMeta] = useState<BookMeta | null>(null);
@@ -134,7 +137,7 @@ export function Export() {
     const bookId = extractBookId(input);
     if (!looksLikeBookId(bookId)) {
       setPhase("error");
-      setError("请粘贴微信读书书籍链接（weread.qq.com/web/reader/…）或书籍 ID");
+      setError(t("请粘贴微信读书书籍链接（weread.qq.com/web/reader/…）或书籍 ID"));
       return;
     }
     setPhase("parsing");
@@ -168,19 +171,19 @@ export function Export() {
       try {
         const { meta: m, validation: v } = await fetchBookViaOp(id);
         if (v.logged_in === false) {
-          lines.push({ ok: false, text: "登录已失效，本条及后续书籍未处理：请重新登录后重试" });
+          lines.push({ ok: false, text: t("登录已失效，本条及后续书籍未处理：请重新登录后重试") });
           aborted = true;
           break;
         }
         if (!v.ok) {
-          lines.push({ ok: false, text: `${id} 未入队——${v.user_message || "书籍不可用"}` });
+          lines.push({ ok: false, text: t("{id} 未入队——{msg}", { id, msg: v.user_message || t("书籍不可用") }) });
           continue;
         }
         await api.importBook({ bookId: m.book_id, title: m.title, author: m.author, intro: m.intro, coverPath: m.cover_path });
         for (const fmt of formats) await api.createTask(m.book_id, fmt, outputDir || undefined);
-        lines.push({ ok: true, text: `《${m.title}》已入队（${formats.map((f) => FORMATS.find((x) => x.key === f)?.name).join("+")}）` });
+        lines.push({ ok: true, text: t("《{title}》已入队（{formats}）", { title: m.title, formats: formats.map((f) => t(FORMATS.find((x) => x.key === f)?.name ?? f)).join("+") }) });
       } catch (e) {
-        lines.push({ ok: false, text: `${id} 未入队——${toAppError(e).userMessage}` });
+        lines.push({ ok: false, text: t("{id} 未入队——{msg}", { id, msg: toAppError(e).userMessage }) });
       } finally {
         setBatchProgress({ done: i + 1, total: ids.length });
       }
@@ -257,7 +260,13 @@ export function Export() {
       });
       setBatchSummary([{
         ok: true,
-        text: `划线汇总已生成：${result.file_path}（书 ${result.books_ok} 本 · 划线 ${result.total_highlights} 条 · 想法 ${result.total_reviews} 条${result.books_empty ? ` · 无笔记跳过 ${result.books_empty} 本` : ""}）`,
+        text: t("划线汇总已生成：{path}（书 {books} 本 · 划线 {h} 条 · 想法 {r} 条{empty}）", {
+          path: result.file_path,
+          books: result.books_ok,
+          h: result.total_highlights,
+          r: result.total_reviews,
+          empty: result.books_empty ? t(" · 无笔记跳过 {n} 本", { n: result.books_empty }) : "",
+        }),
       }]);
     } catch (e) {
       setBatchSummary([{ ok: false, text: toAppError(e).userMessage }]);
@@ -280,7 +289,7 @@ export function Export() {
       dispatchParse(text);
     } catch (e) {
       setPhase("error");
-      setError("无法读取剪贴板：" + toAppError(e).userMessage);
+      setError(t("无法读取剪贴板：{msg}", { msg: toAppError(e).userMessage }));
     }
   }
 
@@ -343,17 +352,17 @@ export function Export() {
   const batchCount = extractBookIds(raw).length;
 
   const authHint = auth.waiting
-    ? "已在弹出浏览器中打开微信读书登录页，请使用微信扫码（300 秒内完成）。"
+    ? t("已在弹出浏览器中打开微信读书登录页，请使用微信扫码（300 秒内完成）。")
     : auth.status === "checking"
-      ? "正在检查本机登录会话…"
-      : "登录后即可抓取并导出你有权阅读的书籍。";
+      ? t("正在检查本机登录会话…")
+      : t("登录后即可抓取并导出你有权阅读的书籍。");
 
   return (
     <div className="flex max-w-[860px] flex-col gap-8">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-2xl font-bold text-ink">导出书籍</h1>
+        <h1 className="text-2xl font-bold text-ink">{t("导出书籍")}</h1>
         <p className="text-sm text-muted">
-          粘贴微信读书的书籍链接或书籍 ID，导出为精排 PDF / EPUB / Markdown，自动存入书库。
+          {t("粘贴微信读书的书籍链接或书籍 ID，导出为精排 PDF / EPUB / Markdown，自动存入书库。")}
         </p>
       </div>
 
@@ -361,10 +370,10 @@ export function Export() {
         <section className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface px-5 py-3.5">
           <StatusPill tone="neutral">
             {auth.waiting
-              ? "等待扫码"
+              ? t("等待扫码")
               : auth.status === "checking" || auth.status === "unknown"
-                ? "检查中…"
-                : "未登录"}
+                ? t("检查中…")
+                : t("未登录")}
           </StatusPill>
           <div className="min-w-0 flex-1 basis-64">
             <p className="text-sm text-muted">{authHint}</p>
@@ -377,10 +386,10 @@ export function Export() {
               auth.status !== "checking" && (
                 <>
                   <Button variant="ghost" onClick={() => void auth.check()}>
-                    重新检查
+                    {t("重新检查")}
                   </Button>
                   <Button variant="primary" onClick={() => void auth.startLogin()}>
-                    登录微信读书
+                    {t("登录微信读书")}
                   </Button>
                 </>
               )
@@ -395,25 +404,25 @@ export function Export() {
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void parse()}
-            placeholder="粘贴书籍链接或 ID（多本可换行批量导出）"
+            placeholder={t("粘贴书籍链接或 ID（多本可换行批量导出）")}
             spellCheck={false}
             className="input-glass h-11 flex-1 rounded-full px-5 text-[15px] text-ink placeholder:text-faint"
-            aria-label="微信读书书籍链接或 ID"
+            aria-label={t("微信读书书籍链接或 ID")}
           />
           <Button size="lg" variant="secondary" disabled={phase === "parsing"} onClick={() => void pasteAndFetch()}>
-            粘贴并获取
+            {t("粘贴并获取")}
           </Button>
           <Button size="lg" variant="secondary" disabled={phase === "parsing"} onClick={() => setShelfOpen(true)}>
-            从书架导入
+            {t("从书架导入")}
           </Button>
           <Button size="lg" variant="primary" disabled={phase === "parsing" || !raw.trim()} onClick={() => void parse()}>
             {phase === "parsing"
               ? batchProgress
-                ? `获取中 ${batchProgress.done}/${batchProgress.total}`
-                : "获取中…"
+                ? t("获取中 {done}/{total}", { done: batchProgress.done, total: batchProgress.total })
+                : t("获取中…")
               : batchCount > 1
-                ? `获取 ${batchCount} 本`
-                : "获取书籍"}
+                ? t("获取 {n} 本", { n: batchCount })
+                : t("获取书籍")}
           </Button>
         </div>
         {error && <p className="text-sm text-negative-text">{error}</p>}
@@ -428,12 +437,12 @@ export function Export() {
         )}
         {phase === "parsing" && (
           <p className="text-sm text-faint">
-            {summarizing ? "正在逐本拉取划线与想法（每书一次 HTTP，秒级）…" : "正在通过引擎获取书籍信息（需要启动浏览器，约数秒）…"}
+            {summarizing ? t("正在逐本拉取划线与想法（每书一次 HTTP，秒级）…") : t("正在通过引擎获取书籍信息（需要启动浏览器，约数秒）…")}
           </p>
         )}
         {summarizing && summaryOp && (
           <Button variant="ghost" onClick={() => void api.cancelOp(summaryOp).catch(() => {})}>
-            取消汇总
+            {t("取消汇总")}
           </Button>
         )}
       </section>
@@ -444,9 +453,9 @@ export function Export() {
             <BookCover path={meta.cover_path} title={meta.title} width={88} />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex items-center gap-2.5">
-                <h2 className="truncate text-base font-semibold">{meta.title || "未知书名"}</h2>
-                {imported && <StatusPill tone="positive">已就绪</StatusPill>}
-                {validation && !validation.ok && <StatusPill tone="negative">不可用</StatusPill>}
+                <h2 className="truncate text-base font-semibold">{meta.title || t("未知书名")}</h2>
+                {imported && <StatusPill tone="positive">{t("已就绪")}</StatusPill>}
+                {validation && !validation.ok && <StatusPill tone="negative">{t("不可用")}</StatusPill>}
               </div>
               {meta.author && <p className="text-sm text-muted">{meta.author}</p>}
               {validation && !validation.ok && validation.user_message && (
@@ -458,8 +467,8 @@ export function Export() {
           {validation?.ok && (
             <>
               <div className="flex flex-col gap-2 border-t border-rule pt-4">
-                <span className="text-sm font-medium">导出格式</span>
-                <div className="flex flex-wrap gap-2" role="group" aria-label="导出格式（可多选）">
+                <span className="text-sm font-medium">{t("导出格式")}</span>
+                <div className="flex flex-wrap gap-2" role="group" aria-label={t("导出格式（可多选）")}>
                   {FORMATS.map((f) => {
                     const selected = formats.includes(f.key);
                     return (
@@ -477,22 +486,22 @@ export function Export() {
                         }`}
                       >
                         {selected && <Check size={13} strokeWidth={2} aria-hidden="true" />}
-                        {f.name}
+                        {t(f.name)}
                       </button>
                     );
                   })}
                 </div>
                 <p className="text-xs text-faint">
-                  {FORMATS.map((f) => `${f.name}：${f.hint}`).join(" · ")}
+                  {FORMATS.map((f) => `${t(f.name)}：${t(f.hint)}`).join(" · ")}
                 </p>
               </div>
 
               <div className="flex items-center gap-4 border-t border-rule pt-4">
-                <span className="flex-none text-sm font-medium">保存到</span>
+                <span className="flex-none text-sm font-medium">{t("保存到")}</span>
                 <span className="selectable min-w-0 flex-1 truncate text-sm text-muted" title={outputDir}>
                   {outputDir || "—"}
                 </span>
-                <Button onClick={() => void pickDir()}>更改…</Button>
+                <Button onClick={() => void pickDir()}>{t("更改…")}</Button>
               </div>
 
               {createError && <p className="text-sm text-negative-text">{createError}</p>}
@@ -504,11 +513,11 @@ export function Export() {
                 onClick={() => void createTasks()}
               >
                 {creating
-                  ? "创建中…"
-                  : `开始导出（${formats.map((f) => FORMATS.find((x) => x.key === f)?.name).join(" + ")}）`}
+                  ? t("创建中…")
+                  : t("开始导出（{formats}）", { formats: formats.map((f) => t(FORMATS.find((x) => x.key === f)?.name ?? f)).join(" + ") })}
               </Button>
               <p className="-mt-3 text-xs text-faint">
-                同名文件将被覆盖；抓取速度固定为温和模式，整本导出需要较长时间，可在底部任务栏随时取消与继续。
+                {t("同名文件将被覆盖；抓取速度固定为温和模式，整本导出需要较长时间，可在底部任务栏随时取消与继续。")}
               </p>
             </>
           )}
@@ -516,12 +525,12 @@ export function Export() {
       )}
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-ink">支持的格式</h2>
+        <h2 className="text-base font-semibold text-ink">{t("支持的格式")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {FORMATS.map((f) => (
             <div key={f.key} className="rounded-card border border-line bg-[var(--well)] p-4">
-              <p className="text-sm font-medium text-ink">{f.name}</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted">{f.hint}</p>
+              <p className="text-sm font-medium text-ink">{t(f.name)}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted">{t(f.hint)}</p>
             </div>
           ))}
         </div>
@@ -530,16 +539,16 @@ export function Export() {
       {recent !== null && (
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-ink">最近导出</h2>
+            <h2 className="text-base font-semibold text-ink">{t("最近导出")}</h2>
             {recent.length > 0 && (
               <Button variant="ghost" onClick={() => goto("library")}>
-                前往书库
+                {t("前往书库")}
               </Button>
             )}
           </div>
           {recent.length === 0 ? (
             <p className="text-sm text-faint">
-              还没有导出记录——第一次导出完成后，最近的书会显示在这里。
+              {t("还没有导出记录——第一次导出完成后，最近的书会显示在这里。")}
             </p>
           ) : (
             <div className="flex flex-wrap gap-5">
@@ -548,7 +557,7 @@ export function Export() {
                   key={b.bookId}
                   onClick={() => goto("library")}
                   className="group flex w-[96px] flex-none flex-col gap-1.5 text-left"
-                  aria-label={`在书库中查看《${b.title}》`}
+                  aria-label={t("在书库中查看《{title}》", { title: b.title })}
                 >
                   <BookCover fill path={b.coverPath} title={b.title} />
                   <span className="line-clamp-1 font-serif text-[13px] leading-snug underline-offset-2 group-hover:underline">
@@ -557,7 +566,7 @@ export function Export() {
                   <span className="truncate text-[11px] text-faint">
                     {b.files
                       .map((f) =>
-                        f.format === "markdown" ? "Markdown" : f.format === "notes" ? "笔记" : f.format.toUpperCase(),
+                        f.format === "markdown" ? t("Markdown") : f.format === "notes" ? t("笔记") : f.format.toUpperCase(),
                       )
                       .join(" · ")}
                   </span>

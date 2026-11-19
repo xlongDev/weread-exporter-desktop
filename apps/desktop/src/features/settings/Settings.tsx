@@ -12,6 +12,7 @@ import { applyTheme, type ThemeMode } from "../../stores/theme";
 import type { PathsInfo } from "../../types";
 import { Button } from "../../components/Button";
 import { StatusPill } from "../../components/StatusPill";
+import { t, useT, useI18n, type Lang } from "../../i18n";
 import {
   checkViaUpdater,
   compareVersions,
@@ -50,6 +51,7 @@ const LAYOUT_PRESETS = [
 
 /** 设置：玻璃卡片模块化网格——每区一张卡，字段纵向堆叠（docs/09 §4） */
 export function Settings() {
+  const t = useT();
   const { settings, loadError, load, set } = useSettings();
   const engine = useEngine();
   const auth = useAuth();
@@ -179,6 +181,8 @@ export function Settings() {
     }
   }
 
+  const lang = (useI18n((s) => s.lang));
+  const setLang = useI18n((s) => s.setLang);
   const themeMode = (settings?.["general.theme"] as ThemeMode) ?? "system";
   const outputDir = (settings?.["general.output_dir"] as string) ?? paths?.default_output_dir ?? "";
   const fontSize = (settings?.["export.font_size"] as string) || "default";
@@ -201,15 +205,15 @@ export function Settings() {
   return (
     <div className="flex min-h-full flex-col gap-6">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-2xl font-bold text-ink">设置</h1>
-        <p className="text-sm text-muted">应用偏好与本地数据管理，全部保存在本机。</p>
+        <h1 className="text-2xl font-bold text-ink">{t("设置")}</h1>
+        <p className="text-sm text-muted">{t("应用偏好与本地数据管理，全部保存在本机。")}</p>
       </div>
 
       {loadError && (
         <p className="text-sm text-negative-text">
-          设置读取失败：{loadError}
+          {t("设置读取失败：{msg}", { msg: loadError })}
           <button className="ml-2 underline" onClick={() => void load()}>
-            重试
+            {t("重试")}
           </button>
         </p>
       )}
@@ -217,11 +221,11 @@ export function Settings() {
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <SettingsCard
-          title="外观"
-          description="界面跟随系统，或手动选择浅色 / 深色，立即生效并记住。"
+          title={t("外观")}
+          description={t("界面跟随系统，或手动选择浅色 / 深色，立即生效并记住。")}
           span
         >
-          <FieldRow label="主题">
+          <FieldRow label={t("主题")}>
             <ThemeSwitcher
               value={themeMode}
               onChange={(mode) => {
@@ -230,23 +234,37 @@ export function Settings() {
               }}
             />
           </FieldRow>
+          <FieldRow label={t("语言")}>
+            <SegmentedControl
+              label={t("语言")}
+              value={lang}
+              options={[
+                { key: "zh", label: "中文" },
+                { key: "en", label: "English" },
+              ]}
+              onChange={(v) => {
+                setLang(v as Lang);
+                void write("general.language", v, "language");
+              }}
+            />
+          </FieldRow>
         </SettingsCard>
 
         <SettingsCard
-          title="导出"
-          description="默认保存位置、命名规则与正文排版，导出新任务时应用。"
+          title={t("导出")}
+          description={t("默认保存位置、命名规则与正文排版，导出新任务时应用。")}
         >
-          <FieldRow label="默认导出目录">
+          <FieldRow label={t("默认导出目录")}>
             <span
               className="selectable min-w-0 flex-1 truncate text-sm text-muted"
               title={outputDir}
             >
               {outputDir || "—"}
             </span>
-            <Button onClick={() => void pickOutputDir()}>选择目录…</Button>
+            <Button onClick={() => void pickOutputDir()}>{t("选择目录…")}</Button>
             {saved === "output_dir" && <SavedStamp />}
           </FieldRow>
-          <FieldRow label="文件名模板">
+          <FieldRow label={t("文件名模板")}>
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <input
                 ref={nameInputRef}
@@ -254,13 +272,13 @@ export function Settings() {
                 onChange={(e) => setNamingDraft(e.target.value)}
                 onBlur={() => void saveNaming()}
                 onKeyDown={(e) => e.key === "Enter" && void saveNaming()}
-                placeholder="留空则直接使用书名"
+                placeholder={t("留空则直接使用书名")}
                 spellCheck={false}
                 className="input-glass h-9 w-full rounded-full px-3.5 text-sm outline-none placeholder:text-faint"
-                aria-label="导出文件名模板"
+                aria-label={t("导出文件名模板")}
               />
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-faint">点击插入</span>
+                <span className="text-xs text-faint">{t("点击插入")}</span>
                 {NAME_PLACEHOLDERS.map((p) => (
                   <button
                     key={p}
@@ -272,14 +290,14 @@ export function Settings() {
                 ))}
               </div>
               <div className="flex items-center gap-2 rounded-[12px] bg-[var(--well)] px-3 py-2">
-                <span className="flex-none text-xs text-faint">预览</span>
+                <span className="flex-none text-xs text-faint">{t("预览")}</span>
                 <span className="tnum min-w-0 flex-1 truncate text-sm text-ink">{previewBase}.pdf</span>
-                <span className="flex-none text-[11px] text-faint">示例</span>
+                <span className="flex-none text-[11px] text-faint">{t("示例")}</span>
               </div>
             </div>
             {saved === "naming" && <SavedStamp />}
           </FieldRow>
-          <FieldRow label="排版预设">
+          <FieldRow label={t("排版预设")}>
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
               {LAYOUT_PRESETS.map((p) => {
                 const active = fontSize === p.font && pageMargin === p.margin;
@@ -293,25 +311,25 @@ export function Settings() {
                     }`}
                   >
                     {active && <Check size={13} strokeWidth={2} aria-hidden="true" />}
-                    {p.label}
+                    {t(p.label)}
                   </button>
                 );
               })}
               {saved === "preset" && <SavedStamp />}
             </div>
           </FieldRow>
-          <FieldRow label="正文字号">
+          <FieldRow label={t("正文字号")}>
             <SegmentedControl
-              label="正文字号"
+              label={t("正文字号")}
               value={fontSize}
               options={FONT_SIZE_OPTIONS}
               onChange={(v) => void write("export.font_size", v, "font_size")}
             />
             {saved === "font_size" && <SavedStamp />}
           </FieldRow>
-          <FieldRow label="PDF 页边距">
+          <FieldRow label={t("PDF 页边距")}>
             <SegmentedControl
-              label="PDF 页边距"
+              label={t("PDF 页边距")}
               value={pageMargin}
               options={PAGE_MARGIN_OPTIONS}
               onChange={(v) => void write("export.page_margin", v, "page_margin")}
@@ -319,98 +337,98 @@ export function Settings() {
             {saved === "page_margin" && <SavedStamp />}
           </FieldRow>
           <p className="text-xs text-faint">
-            字号对 PDF 与 EPUB 正文生效，页边距仅 PDF；标准 = 内置排版，导出新任务时应用。
+            {t("字号对 PDF 与 EPUB 正文生效，页边距仅 PDF；标准 = 内置排版，导出新任务时应用。")}
           </p>
         </SettingsCard>
 
         <SettingsCard
-          title="数据与隐私"
-          description="任务记录、设置与浏览器会话均保存在本机，不会上传。"
+          title={t("数据与隐私")}
+          description={t("任务记录、设置与浏览器会话均保存在本机，不会上传。")}
         >
-          <FieldRow label="数据目录">
+          <FieldRow label={t("数据目录")}>
             <span
               className="selectable min-w-0 flex-1 truncate text-sm text-muted"
               title={paths?.app_data}
             >
               {paths?.app_data ?? "—"}
             </span>
-            <Button onClick={() => void revealDataDir()}>打开</Button>
+            <Button onClick={() => void revealDataDir()}>{t("打开")}</Button>
           </FieldRow>
-          <FieldRow label="登录会话">
+          <FieldRow label={t("登录会话")}>
             <span className="min-w-0 flex-1 truncate text-sm text-muted">
-              登录态保存在本机浏览器配置目录，可随时清除。
+              {t("登录态保存在本机浏览器配置目录，可随时清除。")}
             </span>
-            {auth.status === "in" && <StatusPill tone="positive">已登录</StatusPill>}
-            {auth.status === "out" && <StatusPill tone="neutral">未登录</StatusPill>}
-            {auth.status === "checking" && <StatusPill tone="neutral">检查中…</StatusPill>}
-            <Button onClick={() => void auth.logout()}>退出登录</Button>
+            {auth.status === "in" && <StatusPill tone="positive">{t("已登录")}</StatusPill>}
+            {auth.status === "out" && <StatusPill tone="neutral">{t("未登录")}</StatusPill>}
+            {auth.status === "checking" && <StatusPill tone="neutral">{t("检查中…")}</StatusPill>}
+            <Button onClick={() => void auth.logout()}>{t("退出登录")}</Button>
           </FieldRow>
         </SettingsCard>
 
-        <SettingsCard title="关于" description="版本与开源信息。" span>
-          <FieldRow label="应用版本">
+        <SettingsCard title={t("关于")} description={t("版本与开源信息。")} span>
+          <FieldRow label={t("应用版本")}>
             <span className="tnum text-sm text-muted">{appVersion || "—"}</span>
           </FieldRow>
-          <FieldRow label="检查更新">
+          <FieldRow label={t("检查更新")}>
             <span className="min-w-0 flex-1 text-sm text-muted">
-              {update.status === "idle" && "从 GitHub Releases 检查新版本"}
-              {update.status === "checking" && "检查中…"}
-              {update.status === "latest" && `已是最新（${appVersion}）`}
-              {update.status === "available" && `发现新版本 ${update.tag}（当前 ${appVersion}）`}
+              {update.status === "idle" && t("从 GitHub Releases 检查新版本")}
+              {update.status === "checking" && t("检查中…")}
+              {update.status === "latest" && t("已是最新（{version}）", { version: appVersion })}
+              {update.status === "available" && t("发现新版本 {tag}（当前 {version}）", { tag: update.tag, version: appVersion })}
               {update.status === "downloading" &&
                 `下载中 ${update.downloaded >= 1048576 ? `${(update.downloaded / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(update.downloaded / 1024))} KB`}${update.total ? ` / ${(update.total / 1048576).toFixed(1)} MB` : ""}`}
-              {update.status === "installed" && "已安装，重启应用后生效（退出后重新打开即可）"}
-              {update.status === "error" && "检查失败（需要能访问 GitHub），请稍后重试"}
+              {update.status === "installed" && t("已安装，重启应用后生效（退出后重新打开即可）")}
+              {update.status === "error" && t("检查失败（需要能访问 GitHub），请稍后重试")}
             </span>
             {update.status === "idle" && (
-              <Button onClick={() => void checkUpdate()}>检查更新</Button>
+              <Button onClick={() => void checkUpdate()}>{t("检查更新")}</Button>
             )}
-            {update.status === "checking" && <Button disabled>检查中…</Button>}
+            {update.status === "checking" && <Button disabled>{t("检查中…")}</Button>}
             {update.status === "error" && (
-              <Button onClick={() => void checkUpdate()}>重试</Button>
+              <Button onClick={() => void checkUpdate()}>{t("重试")}</Button>
             )}
             {update.status === "available" && update.url === null && (
               <Button variant="primary" onClick={() => void installUpdate()}>
-                下载并安装
+                {t("下载并安装")}
               </Button>
             )}
             {update.status === "available" && update.url !== null && (
               <>
-                <Button onClick={() => void openUrl(update.url as string).catch(() => {})}>打开发布页</Button>
+                <Button onClick={() => void openUrl(update.url as string).catch(() => {})}>{t("打开发布页")}</Button>
                 <Button variant="ghost" onClick={() => void copyInstallCommand()}>
-                  复制安装命令
+                  {t("复制安装命令")}
                 </Button>
               </>
             )}
           </FieldRow>
-          <FieldRow label="诊断信息">
+          <FieldRow label={t("诊断信息")}>
             <span className="min-w-0 flex-1 text-sm text-muted">
-              复制版本、近期失败任务与应用日志（已脱敏），问题反馈时附上可加快定位。
+              {t("复制版本、近期失败任务与应用日志（已脱敏），问题反馈时附上可加快定位。")}
             </span>
-            <Button onClick={() => void copyDiagnostics()}>复制诊断信息</Button>
+            <Button onClick={() => void copyDiagnostics()}>{t("复制诊断信息")}</Button>
             {saved === "diagnostics" && <SavedStamp />}
           </FieldRow>
-          <FieldRow label="导出引擎">
+          <FieldRow label={t("导出引擎")}>
             <span className="tnum min-w-0 flex-1 truncate text-sm text-muted">
               {engine.status === "ready" && `v${engine.engineVersion} · Python ${engine.pythonVersion}`}
-              {engine.status === "checking" && "检查中…"}
+              {engine.status === "checking" && t("检查中…")}
               {engine.status === "unknown" && "—"}
               {(engine.status === "error" || (engine.status === "ready" && !engine.engineVersion)) &&
-                (engine.error ?? "引擎不可用")}
+                (engine.error ?? t("引擎不可用"))}
             </span>
-            {engine.status === "ready" && <StatusPill tone="positive">就绪</StatusPill>}
+            {engine.status === "ready" && <StatusPill tone="positive">{t("就绪")}</StatusPill>}
             {engine.status === "error" && (
               <>
-                <StatusPill tone="negative">异常</StatusPill>
+                <StatusPill tone="negative">{t("异常")}</StatusPill>
                 <Button variant="ghost" onClick={() => void engine.refresh()}>
-                  重试
+                  {t("重试")}
                 </Button>
               </>
             )}
           </FieldRow>
-          <FieldRow label="开源许可">
+          <FieldRow label={t("开源许可")}>
             <span className="text-sm text-muted">
-              MIT License · 基于开源项目{" "}
+              {t("MIT License · 基于开源项目")}{" "}
               <button
                 className="text-data underline underline-offset-2"
                 onClick={() => void openUrl("https://github.com/WANGXIN-567/weread-book-exporter").catch(() => {})}
@@ -445,7 +463,7 @@ export function Settings() {
 }
 
 function SavedStamp() {
-  return <span className="text-xs text-faint">已保存</span>;
+  return <span className="text-xs text-faint">{t("已保存")}</span>;
 }
 
 const THEME_OPTIONS: { key: ThemeMode; label: string; icon: typeof Monitor }[] = [
@@ -471,7 +489,7 @@ function ThemeSwitcher({
   return (
     <div
       role="radiogroup"
-      aria-label="主题"
+      aria-label={t("主题")}
       className="relative grid min-w-0 flex-1 max-w-[480px] grid-cols-3 rounded-full bg-raised p-1"
     >
       <span
@@ -492,7 +510,7 @@ function ThemeSwitcher({
             }`}
           >
             <Icon size={14} strokeWidth={1.5} aria-hidden="true" />
-            {label}
+            {t(label)}
           </button>
         );
       })}

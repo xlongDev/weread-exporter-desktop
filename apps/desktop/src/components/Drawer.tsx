@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { t } from "../i18n";
 
 /** 右侧抽屉：任务详情等次级信息流 */
 export function Drawer({
@@ -32,7 +33,7 @@ export function Drawer({
           <h2 className="text-base font-semibold text-ink">{title}</h2>
           <button
             onClick={onClose}
-            aria-label="关闭"
+            aria-label={t("关闭")}
             className="flex h-7 w-7 items-center justify-center rounded-full text-muted hover:bg-raised hover:text-ink"
           >
             <X size={16} strokeWidth={1.5} aria-hidden="true" />
