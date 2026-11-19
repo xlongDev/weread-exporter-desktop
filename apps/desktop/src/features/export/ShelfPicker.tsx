@@ -62,6 +62,7 @@ export function ShelfPicker({
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [failedCovers, setFailedCovers] = useState<Set<string>>(new Set());
   const [opId, setOpId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -69,6 +70,7 @@ export function ShelfPicker({
     setPhase("loading");
     setError("");
     setSelected(new Set());
+    setFailedCovers(new Set());
     setQuery("");
     let alive = true;
     fetchShelfViaOp()
@@ -93,6 +95,13 @@ export function ShelfPicker({
     if (opId) void api.cancelOp(opId).catch(() => {});
     setOpId(null);
     onClose();
+  }
+
+  // 确认导出：喂给批量流程的是 v-hash（bookDetail/抓取管线的真实 ID，
+  // 数字 bookId 的 bookDetail 页 404——3300198797 实测）；缺失回退 book_id
+  function confirmSelected() {
+    const hashById = new Map(books.map((b) => [b.book_id, b.book_hash]));
+    onConfirm(selectedIds.map((id) => hashById.get(id) || id));
   }
 
   const shown = filterShelfItems(books, query);
@@ -120,7 +129,7 @@ export function ShelfPicker({
           <Button
             variant="primary"
             disabled={selectedIds.length === 0}
-            onClick={() => onConfirm(selectedIds)}
+            onClick={confirmSelected}
           >
             导出所选（{selectedIds.length}）
           </Button>
@@ -153,6 +162,7 @@ export function ShelfPicker({
               <div className="grid max-h-[52vh] grid-cols-4 gap-x-4 gap-y-5 overflow-y-auto pt-1 sm:grid-cols-5 md:grid-cols-6">
                 {shown.map((b) => {
                   const picked = selected.has(b.book_id);
+                  const broken = failedCovers.has(b.book_id);
                   return (
                     <button
                       key={b.book_id}
@@ -162,12 +172,19 @@ export function ShelfPicker({
                       title={b.title}
                     >
                       <span className="relative block overflow-hidden rounded-lg border border-line">
-                        {b.cover ? (
+                        {b.cover && !broken ? (
                           <img
                             src={b.cover}
                             alt=""
                             loading="lazy"
                             referrerPolicy="no-referrer"
+                            onError={() =>
+                              setFailedCovers((prev) => {
+                                const next = new Set(prev);
+                                next.add(b.book_id);
+                                return next;
+                              })
+                            }
                             className="aspect-[2/3] w-full object-cover"
                           />
                         ) : (

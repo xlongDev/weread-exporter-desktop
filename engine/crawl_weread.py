@@ -267,8 +267,18 @@ def fetch_book_meta_http(book_id, timeout=20):
 SHELF_SYNC_URL = "https://weread.qq.com/web/shelf/sync"
 
 
+def book_hash_from_link(deep_link):
+    """从 deepLink/readerLink 提取 v-hash（bookDetail/reader 页与抓取管线用的 ID 体系；
+    数字 bookId 的 bookDetail 页 404）。hash 为小写字母数字（含 g 等非十六进制字符）。无参数返回 ""。"""
+    m = re.search(r"[?&]v=([0-9a-z]{10,40})(?:&|$)", deep_link or "")
+    if m:
+        return m.group(1)
+    m = re.search(r"/reader/([0-9a-z]{10,40})(?:\?|/|$)", deep_link or "")
+    return m.group(1) if m else ""
+
+
 def parse_shelf_response(data):
-    """从 shelf/sync 回包提取书籍卡片（纯函数）：bookId/标题/作者/封面。
+    """从 shelf/sync 回包提取书籍卡片（纯函数）：bookId/标题/作者/封面/v-hash。
     跳过缺 bookId 或标题的条目（文件夹/录音等非书条目天然被过滤）。"""
     books = []
     for b in (data or {}).get("books") or []:
@@ -281,6 +291,8 @@ def parse_shelf_response(data):
             "title": title,
             "author": (b.get("author") or "").strip(),
             "cover": b.get("cover") or "",
+            # bookDetail/抓取管线的真实 ID（deepLink v 参数）；缺失时前端回退 book_id
+            "book_hash": book_hash_from_link(b.get("deepLink") or b.get("readerLink") or ""),
         })
     return books
 

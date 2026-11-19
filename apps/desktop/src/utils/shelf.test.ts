@@ -3,9 +3,9 @@ import { filterShelfItems } from "./shelf";
 import type { ShelfItem } from "../types";
 
 const items: ShelfItem[] = [
-  { book_id: "1", title: "大侦探波洛探案全集", author: "阿加莎·克里斯蒂", cover: "" },
-  { book_id: "2", title: "三体", author: "刘慈欣", cover: "" },
-  { book_id: "3", title: "没有个性的人", author: "", cover: "" },
+  { book_id: "1", title: "大侦探波洛探案全集", author: "阿加莎·克里斯蒂", cover: "", book_hash: "6c532640716e83076c508ef" },
+  { book_id: "2", title: "三体", author: "刘慈欣", cover: "", book_hash: "3b132980813ab94eeg013129" },
+  { book_id: "3", title: "没有个性的人", author: "", cover: "", book_hash: "" },
 ];
 
 describe("filterShelfItems（书架导入弹窗搜索）", () => {

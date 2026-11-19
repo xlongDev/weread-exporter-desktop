@@ -291,8 +291,10 @@ def test_parse_book_detail_html_fallback_cover():
 def test_parse_shelf_response_extracts_books():
     data = {"books": [
         {"bookId": "24019719", "title": "大侦探波洛探案全集", "author": "阿加莎·克里斯蒂",
-         "cover": "https://c/t6_24019719.jpg", "format": "epub"},
-        {"bookId": "821366", "title": " 三体 ", "author": " 刘慈欣 ", "cover": ""},
+         "cover": "https://c/t6_24019719.jpg", "format": "epub",
+         "deepLink": "https://weread.qq.com/book-detail?type=1&v=6c532640716e83076c508ef"},
+        {"bookId": "821366", "title": " 三体 ", "author": " 刘慈欣 ", "cover": "",
+         "readerLink": "https://weread.qq.com/web/reader/3b132980813ab94eeg013129"},
         # 非书/缺字段条目应被跳过
         {"bookId": "", "title": "无 ID"},
         {"title": "无 ID 字段"},
@@ -303,6 +305,16 @@ def test_parse_shelf_response_extracts_books():
     assert books[0]["author"] == "阿加莎·克里斯蒂"
     assert books[1]["title"] == "三体"  # 去首尾空白
     assert books[1]["cover"] == ""
+    # v-hash 提取：deepLink v 参数 / readerLink 路径两种来源
+    assert books[0]["book_hash"] == "6c532640716e83076c508ef"
+    assert books[1]["book_hash"] == "3b132980813ab94eeg013129"
+
+
+def test_book_hash_from_link_variants():
+    assert crawl_weread.book_hash_from_link("https://weread.qq.com/book-detail?type=1&v=11f3275081aa33b3f7c8f2f") == "11f3275081aa33b3f7c8f2f"
+    assert crawl_weread.book_hash_from_link("https://weread.qq.com/web/reader/6c532640716e83076c508ef") == "6c532640716e83076c508ef"
+    assert crawl_weread.book_hash_from_link("") == ""
+    assert crawl_weread.book_hash_from_link("https://weread.qq.com/book-detail?type=1") == ""
 
 
 def test_parse_shelf_response_empty_and_missing():
@@ -321,14 +333,16 @@ class _FakeJsonResp:
 
 
 def test_fetch_shelf_http_success(monkeypatch):
-    body = json.dumps({"books": [{"bookId": "1", "title": "书", "author": "人", "cover": ""}]})
+    body = json.dumps({"books": [{"bookId": "1", "title": "书", "author": "人", "cover": "",
+                                  "deepLink": "https://weread.qq.com/book-detail?type=1&v=abc123def456789"}]})
     monkeypatch.setattr(crawl_weread.urllib.request, "urlopen", lambda req, timeout: _FakeJsonResp(body))
     cookies = [
         {"name": "wr_skey", "value": "k", "domain": ".weread.qq.com"},
         {"name": "other", "value": "x", "domain": "example.com"},  # 非 weread 域不得进 Cookie 头
     ]
     books = crawl_weread.fetch_shelf_http(cookies)
-    assert books == [{"book_id": "1", "title": "书", "author": "人", "cover": ""}]
+    assert books == [{"book_id": "1", "title": "书", "author": "人", "cover": "",
+                      "book_hash": "abc123def456789"}]
 
 
 def test_fetch_shelf_http_login_expired_returns_none(monkeypatch):

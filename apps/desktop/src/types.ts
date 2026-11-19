@@ -74,6 +74,8 @@ export interface ShelfItem {
   title: string;
   author: string;
   cover: string;
+  /** bookDetail/抓取管线用的 v-hash（数字 bookId 的 bookDetail 页 404）；缺失时回退 book_id */
+  book_hash: string;
 }
 
 /** 引擎 auth.status 事件负载 */
