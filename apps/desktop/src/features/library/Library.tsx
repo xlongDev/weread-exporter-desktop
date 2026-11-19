@@ -12,6 +12,14 @@ import { StatusPill } from "../../components/StatusPill";
 
 const FORMAT_LABEL: Record<string, string> = { pdf: "PDF", epub: "EPUB", markdown: "Markdown", notes: "笔记" };
 
+/** 文件行标签：Markdown 引擎产出两个变体（全书合并排版版/纯 Markdown 笔记版），用简称区分行 */
+function fileLabel(f: { format: string; file_name: string }): string {
+  if (f.format !== "markdown") return FORMAT_LABEL[f.format] ?? f.format;
+  if (f.file_name.includes("全书合并")) return "MD · 合并排版";
+  if (f.file_name.includes("纯Markdown")) return "MD · 纯净";
+  return FORMAT_LABEL.markdown;
+}
+
 /** 书库：书架（按书的封面墙 + 格式文件行，默认）与文件列表（按文件平铺）两种视图 */
 export function Library() {
   const [files, setFiles] = useState<LibraryFile[]>([]);
@@ -186,11 +194,11 @@ export function Library() {
                       onClick={() => void open(f)}
                       disabled={!f.exists_ok}
                       className="flex min-w-0 flex-1 items-baseline gap-2 rounded-[4px] px-1 py-0.5 text-left transition-colors hover:bg-raised/60 disabled:cursor-not-allowed"
-                      aria-label={`打开《${b.title}》${FORMAT_LABEL[f.format] ?? f.format}文件`}
+                      aria-label={`打开《${b.title}》${fileLabel(f)}文件`}
                       title={f.exists_ok ? undefined : "文件缺失，无法打开"}
                     >
                       <span className="flex-none text-xs font-medium">
-                        {FORMAT_LABEL[f.format] ?? f.format}
+                        {fileLabel(f)}
                       </span>
                       <span
                         className={`tnum min-w-0 flex-1 truncate text-xs ${

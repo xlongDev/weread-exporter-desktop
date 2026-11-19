@@ -31,6 +31,11 @@ export const FORMAT_LABEL: Record<string, string> = {
   notes: "笔记",
 };
 
+/** 进度百分比的诚实且可读形态：<1% 保留一位小数，≥1% 取整（0.5% / 8% / 57%，不出 16 位浮点尾巴） */
+export function fmtProgress(p: number): string {
+  return p > 0 && p < 1 ? p.toFixed(1) : String(Math.round(p));
+}
+
 export function stageLabel(stage: string): string {
   const map: Record<string, string> = {
     auth: "等待登录",

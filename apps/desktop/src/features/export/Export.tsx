@@ -441,7 +441,7 @@ export function Export() {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-base font-semibold text-ink">支持的格式</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {FORMATS.map((f) => (
             <div key={f.key} className="rounded-card border border-line bg-[var(--well)] p-4">
               <p className="text-sm font-medium text-ink">{f.name}</p>

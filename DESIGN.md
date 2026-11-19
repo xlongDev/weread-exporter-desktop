@@ -21,7 +21,7 @@
 
 ## Tokens / Shell
 
-- `#root` = **28px 超大圆角壳**（decorations:false + transparent + 自绘红绿灯/拖拽区，见 Sidebar）。
+- `#root` = **28px 超大圆角壳**（transparent + 拖拽区；窗口 chrome 按平台分支——**macOS 原生红绿灯**：`tauri.macos.conf.json` titleBarStyle Overlay + trafficLightPosition 对齐侧栏首行，关闭走 CloseGuard；**Windows 自绘 caption 三钮**：decorations:false + WindowControls，见 docs/16 方案 A）。
 - `.ambient` = 暖纸 + 墨蓝光晕（.glass 的 backdrop 采样对象，token `--ambient` 两套主题）。
 - `.glass` = 模块材质（blur + saturate + 高光边 + 柔影）；surface/well/border/control 全半透明（tokens.css）。
 - 圆角 token：card 20 / control 12 / media 10；控件一律 rounded-full。

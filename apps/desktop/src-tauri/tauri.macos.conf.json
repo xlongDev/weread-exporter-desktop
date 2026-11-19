@@ -1,0 +1,20 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "WeRead Exporter",
+        "width": 1080,
+        "height": 720,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": true,
+        "shadow": true,
+        "trafficLightPosition": { "x": 28, "y": 28 }
+      }
+    ]
+  }
+}

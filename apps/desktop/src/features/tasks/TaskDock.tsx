@@ -5,7 +5,7 @@ import { useTasks } from "../../stores/tasks";
 import { Button } from "../../components/Button";
 import { BookCover } from "../../components/BookCover";
 import { Dialog } from "../../components/Dialog";
-import { FORMAT_LABEL, TaskList, stageLabel } from "./TaskList";
+import { FORMAT_LABEL, TaskList, fmtProgress, stageLabel } from "./TaskList";
 
 /**
  * 常驻任务 dock（IA 收缩后任务中心的载体）：
@@ -114,7 +114,7 @@ export function TaskDock() {
             </span>
             <span className="tnum min-w-0 flex-1 truncate text-xs text-muted">
               {stageLabel(running.current_stage) || "执行中"}
-              {running.progress > 0 && ` ${running.progress}%`}
+              {running.progress > 0 && ` ${fmtProgress(running.progress)}%`}
             </span>
             {waitingCount > 0 && (
               <span className="tnum flex-none text-xs text-faint">排队 {waitingCount}</span>
