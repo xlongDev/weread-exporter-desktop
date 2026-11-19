@@ -3,7 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { api, toAppError } from "../../services/api";
 import { useSettings } from "../../stores/settings";
 import { useEngine } from "../../stores/engine";
@@ -41,6 +41,12 @@ const PAGE_MARGIN_OPTIONS = [
   { key: "default", label: "标准" },
   { key: "wide", label: "宽" },
 ];
+// 一键排版预设（写入 export.font_size + export.page_margin 两个键；命中当前组合的预设高亮）
+const LAYOUT_PRESETS = [
+  { key: "eink", label: "e-ink / Kindle", font: "17", margin: "wide" },
+  { key: "phone", label: "手机", font: "12", margin: "narrow" },
+  { key: "print", label: "打印", font: "default", margin: "default" },
+] as const;
 
 /** 设置：玻璃卡片模块化网格——每区一张卡，字段纵向堆叠（docs/09 §4） */
 export function Settings() {
@@ -85,6 +91,17 @@ export function Settings() {
     window.setTimeout(() => {
       setSaved((cur) => (cur === label ? null : cur));
     }, 1600);
+  }
+
+  async function applyPreset(p: (typeof LAYOUT_PRESETS)[number]) {
+    try {
+      await set("export.font_size", p.font);
+      await set("export.page_margin", p.margin);
+      flashSaved("preset");
+      setActionError(null);
+    } catch (e) {
+      setActionError(toAppError(e).userMessage);
+    }
   }
 
   async function pickOutputDir() {
@@ -261,6 +278,27 @@ export function Settings() {
               </div>
             </div>
             {saved === "naming" && <SavedStamp />}
+          </FieldRow>
+          <FieldRow label="排版预设">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              {LAYOUT_PRESETS.map((p) => {
+                const active = fontSize === p.font && pageMargin === p.margin;
+                return (
+                  <button
+                    key={p.key}
+                    onClick={() => void applyPreset(p)}
+                    aria-pressed={active}
+                    className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm transition-colors ${
+                      active ? "bg-raised text-ink" : "border border-line text-muted hover:bg-raised/60"
+                    }`}
+                  >
+                    {active && <Check size={13} strokeWidth={2} aria-hidden="true" />}
+                    {p.label}
+                  </button>
+                );
+              })}
+              {saved === "preset" && <SavedStamp />}
+            </div>
           </FieldRow>
           <FieldRow label="正文字号">
             <SegmentedControl
