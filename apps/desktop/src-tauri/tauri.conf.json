@@ -47,6 +47,15 @@
     "resources": {
       "resources/engine": "engine",
       "resources/runtime": "runtime"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4ODY1ODUwREYyMDc2RDIKUldUU2RpRGZVRmlHeU55MzlUSFJSd0pGT2U4Z1FDa3hLUVQydGxYbkx5bE8yaWQ5aW5YaXFoTzcK",
+      "endpoints": [
+        "https://github.com/xlongDev/weread-exporter-desktop/releases/latest/download/latest.json"
+      ]
     }
   }
 }

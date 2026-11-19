@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { compareVersions, installCommand } from "./update";
 
 describe("compareVersions", () => {
@@ -35,5 +35,33 @@ describe("installCommand", () => {
   it("Windows 平台给 PowerShell 命令", () => {
     const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
     expect(installCommand(ua)).toContain("install-windows.ps1 | iex");
+  });
+});
+
+// checkViaUpdater 的动态 import 在 vitest 里 mock 掉插件
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn(),
+}));
+
+import { checkViaUpdater } from "./update";
+import { check } from "@tauri-apps/plugin-updater";
+
+const mockedCheck = vi.mocked(check);
+
+describe("checkViaUpdater（应用内更新检查）", () => {
+  it("发现更新返回 available + 版本号", async () => {
+    mockedCheck.mockResolvedValue({ version: "0.2.0", currentVersion: "0.1.9" } as never);
+    const r = await checkViaUpdater();
+    expect(r).toEqual({ kind: "available", version: "0.2.0" });
+  });
+
+  it("端点无更新返回 unavailable（触发回退 GitHub API）", async () => {
+    mockedCheck.mockResolvedValue(null as never);
+    expect(await checkViaUpdater()).toEqual({ kind: "unavailable" });
+  });
+
+  it("插件异常（404/网络）返回 unavailable，不抛错", async () => {
+    mockedCheck.mockRejectedValue(new Error("404"));
+    expect(await checkViaUpdater()).toEqual({ kind: "unavailable" });
   });
 });

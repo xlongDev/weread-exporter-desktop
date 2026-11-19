@@ -39,3 +39,45 @@ export function installCommand(userAgent: string): string {
   }
   return `curl -fsSL ${SCRIPTS_RAW}/install-macos.sh | bash`;
 }
+
+// ---- 应用内更新（tauri-plugin-updater；latest.json 未挂到 Release 时回退 GitHub API 比对） ----
+
+export type UpdaterResult =
+  | { kind: "latest" }
+  | { kind: "available"; version: string }
+  | { kind: "unavailable" }; // 端点无 latest.json（旧版 Release）或平台无产物
+
+/** 经 updater 端点检查；任何失败（含 404/网络）返回 unavailable，由调用方回退手动流程。 */
+export async function checkViaUpdater(): Promise<UpdaterResult> {
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const update = await check({ timeout: 15000 });
+    if (!update) return { kind: "unavailable" };
+    return { kind: "available", version: update.version };
+  } catch {
+    return { kind: "unavailable" };
+  }
+}
+
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null; // Content-Length 缺失时为 null
+}
+
+/** 下载并安装更新（校验 minisign 签名后替换应用）；完成后需手动重启应用。 */
+export async function downloadAndInstall(
+  onProgress: (p: UpdateProgress) => void,
+): Promise<void> {
+  const { check } = await import("@tauri-apps/plugin-updater");
+  const update = await check({ timeout: 15000 });
+  if (!update) throw new Error("更新已不可用，请重新检查");
+  let total: number | null = null;
+  let downloaded = 0;
+  await update.downloadAndInstall((event) => {
+    if (event.event === "Started" && event.data.contentLength) total = event.data.contentLength;
+    if (event.event === "Progress") {
+      downloaded += event.data.chunkLength;
+      onProgress({ downloaded, total });
+    }
+  });
+}

@@ -12,13 +12,21 @@ import { applyTheme, type ThemeMode } from "../../stores/theme";
 import type { PathsInfo } from "../../types";
 import { Button } from "../../components/Button";
 import { StatusPill } from "../../components/StatusPill";
-import { compareVersions, fetchLatestRelease, installCommand } from "../../utils/update";
+import {
+  checkViaUpdater,
+  compareVersions,
+  downloadAndInstall,
+  fetchLatestRelease,
+  installCommand,
+} from "../../utils/update";
 
 type UpdateStatus =
   | { status: "idle" }
   | { status: "checking" }
   | { status: "latest" }
-  | { status: "available"; tag: string; url: string }
+  | { status: "available"; tag: string; url: string | null } // url=null 时可应用内更新
+  | { status: "downloading"; downloaded: number; total: number | null }
+  | { status: "installed" }
   | { status: "error" };
 
 // 排版选项（key 存设置表；"default" = 引擎内置排版，engine/export_book.py 同一套预设）
@@ -102,6 +110,16 @@ export function Settings() {
 
   async function checkUpdate() {
     setUpdate({ status: "checking" });
+    // 优先应用内更新端点（updater + minisign 校验）；latest.json 未挂上时回退 GitHub API 比对
+    const via = await checkViaUpdater();
+    if (via.kind === "available") {
+      setUpdate({ status: "available", tag: via.version, url: null });
+      return;
+    }
+    if (via.kind === "latest") {
+      setUpdate({ status: "latest" });
+      return;
+    }
     const release = await fetchLatestRelease();
     if (!release) {
       setUpdate({ status: "error" });
@@ -112,6 +130,16 @@ export function Settings() {
         ? { status: "available", tag: release.tag, url: release.url }
         : { status: "latest" },
     );
+  }
+
+  async function installUpdate() {
+    setUpdate({ status: "downloading", downloaded: 0, total: null });
+    try {
+      await downloadAndInstall((p) => setUpdate({ status: "downloading", ...p }));
+      setUpdate({ status: "installed" });
+    } catch {
+      setUpdate({ status: "error" });
+    }
   }
 
   async function copyInstallCommand() {
@@ -291,6 +319,9 @@ export function Settings() {
               {update.status === "checking" && "检查中…"}
               {update.status === "latest" && `已是最新（${appVersion}）`}
               {update.status === "available" && `发现新版本 ${update.tag}（当前 ${appVersion}）`}
+              {update.status === "downloading" &&
+                `下载中 ${update.downloaded >= 1048576 ? `${(update.downloaded / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(update.downloaded / 1024))} KB`}${update.total ? ` / ${(update.total / 1048576).toFixed(1)} MB` : ""}`}
+              {update.status === "installed" && "已安装，重启应用后生效（退出后重新打开即可）"}
               {update.status === "error" && "检查失败（需要能访问 GitHub），请稍后重试"}
             </span>
             {update.status === "idle" && (
@@ -300,9 +331,14 @@ export function Settings() {
             {update.status === "error" && (
               <Button onClick={() => void checkUpdate()}>重试</Button>
             )}
-            {update.status === "available" && (
+            {update.status === "available" && update.url === null && (
+              <Button variant="primary" onClick={() => void installUpdate()}>
+                下载并安装
+              </Button>
+            )}
+            {update.status === "available" && update.url !== null && (
               <>
-                <Button onClick={() => void openUrl(update.url).catch(() => {})}>打开发布页</Button>
+                <Button onClick={() => void openUrl(update.url as string).catch(() => {})}>打开发布页</Button>
                 <Button variant="ghost" onClick={() => void copyInstallCommand()}>
                   复制安装命令
                 </Button>

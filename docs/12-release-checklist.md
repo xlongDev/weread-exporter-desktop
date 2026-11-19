@@ -60,3 +60,19 @@
 - [x] 已知限制明确（docs/14）
 
 > 未经真实验证的项保持未勾选并标注 ⏳。
+
+## 应用内更新（v0.1.10 起，tauri-plugin-updater）
+
+**一次性准备（已完成）**：
+- [x] updater minisign 密钥对已生成：私钥 `~/.tauri/weread-updater.key`（**永不入库/入云**），公钥已写入 tauri.conf.json `plugins.updater.pubkey`
+- [x] tauri.conf.json：`bundle.createUpdaterArtifacts: true` + 端点 `releases/latest/download/latest.json`
+- [ ] ⏳ **仓库 secret `TAURI_SIGNING_PRIVATE_KEY`**：`gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/weread-updater.key`（无密码，无需设 PASSWORD）
+
+**每次发版新增步骤（在既有流水线之后）**：
+1. [ ] CI/本地构建现在会额外产出更新产物：macOS `*.app.tar.gz(.sig)`、Windows `*-setup.exe.sig`（release.yml 已自动收集进 dist/）
+2. [ ] 本地 Intel 交叉构建需带签名：`TAURI_SIGNING_PRIVATE_KEY=~/.tauri/weread-updater.key TAURI_TARGET=x86_64-apple-darwin npx tauri build --target x86_64-apple-darwin`
+3. [ ] 全部产物就位后生成清单：`python3 scripts/make-latest-json.py --tag v0.X.Y --dist-dir dist` → dist/latest.json
+4. [ ] `gh release upload vX.Y.Y dist/latest.json --clobber`（与安装包一起挂上）
+5. [ ] 真机验证：旧版本应用 → 设置 → 关于 → 检查更新 → 发现新版本 → 下载并安装 → 重启 → 版本号变化
+
+> 已装用户走应用内更新（安装包经 minisign 校验，与 Apple 签名无关）；新用户仍走一键安装脚本（绕 quarantine）。未挂 latest.json 的旧 Release，应用内检查自动回退 GitHub API 比对（提示手动下载）。
