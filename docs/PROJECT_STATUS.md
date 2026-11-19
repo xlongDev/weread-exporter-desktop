@@ -4,15 +4,13 @@
 
 ## 当前阶段
 
-**Unreleased（待发版）**：书架一键导入、划线/想法导出（notes 第 4 格式）、排版选项（字号/页边距）、应用内更新第一阶段（tauri-plugin-updater 自签名，激活步骤见 docs/12）；真机验收中（书架导入全链路实测通过）。详见 CHANGELOG Unreleased 段。
+**v0.1.10 已正式发布（2026-11-20）**：https://github.com/xlongDev/weread-exporter-desktop/releases/tag/v0.1.10 —— 10 件资产（三平台安装包 + 三平台 updater 签名更新包 + SHA256SUMS + latest.json）。本版内容：书架划线汇总（多本划线/想法合并一个 MD）、排版一键预设（e-ink/手机/打印）、书架分组分区、**修想法端点只认数字 bookId 的既有 bug**（「笔记」格式对书架导入的书此前必失败）；连同 11-20 批次 1：书架一键导入、「笔记」第 4 格式、排版选项、macOS 原生红绿灯与 UI 打磨、封面 CSP 补全等 5 项修复。
 
-**v0.1.4 已正式发布**：修复导出封面/简介与书籍不一致（微信读书 bookInfo 字段服务端串书，改用 og: meta 数据源）+ EPUB 内嵌封面 + 封面升级 t7 高清变体。上一版 v0.1.3：单页导出、粘贴并获取、一键清除、僵尸任务清扫。
+**应用内更新已激活**：仓库 secret `TAURI_SIGNING_PRIVATE_KEY` 已配，v0.1.10 Release 已挂 `latest.json`（三平台 .app.tar.gz/.exe + minisign .sig，`scripts/make-latest-json.py` 生成）。旧版用户检查更新可发现新版并应用内安装；更新链路真机验证待做。
 
-**v0.1.2 已发布**：导出流程按真实使用反馈从四步向导重构为单页（3 次点击），修复输出目录默认值显示。
+**门禁基线**：pytest 74 · cargo 21 · vitest 40 · tsc strict + clippy -D warnings 全绿。CI run 44594200805 全绿。
 
-**v0.1.1 已发布**：修复真实首用发现的登录空白页 bug（登录浏览器现在自动打开微信读书扫码页）；三平台产物 + SHA256SUMS 均以 CI/Release 资产为正本、哈希已实测校验（dist/ 为正本副本）。
-
-**Phase 8+9 - 打包与终验** → 完成（Windows 打包待真实 Windows 机器）
+**待真机验收**：书架划线汇总 UI 全链路（账号无划线数据，真实拉取待用户日常确认）；应用内更新链路（旧版 → 检查更新 → 安装 → 重启）；Windows 真机安装；Intel macOS 真机运行。
 
 ## CI/CD（已上线）
 
