@@ -47,11 +47,12 @@ export type UpdaterResult =
   | { kind: "available"; version: string }
   | { kind: "unavailable" }; // 端点无 latest.json（旧版 Release）或平台无产物
 
-/** 经 updater 端点检查；任何失败（含 404/网络）返回 unavailable，由调用方回退手动流程。 */
-export async function checkViaUpdater(): Promise<UpdaterResult> {
+/** 经 updater 端点检查；任何失败（含 404/网络）返回 unavailable，由调用方回退手动流程。
+ *  proxy：可选更新代理（updater 内部 reqwest 不读系统代理/环境变量，代理用户须显式传入，如 http://127.0.0.1:7897）。 */
+export async function checkViaUpdater(proxy?: string): Promise<UpdaterResult> {
   try {
     const { check } = await import("@tauri-apps/plugin-updater");
-    const update = await check({ timeout: 15000 });
+    const update = await check({ timeout: 15000, ...(proxy ? { proxy } : {}) });
     if (!update) return { kind: "unavailable" };
     return { kind: "available", version: update.version };
   } catch {
@@ -67,9 +68,10 @@ export interface UpdateProgress {
 /** 下载并安装更新（校验 minisign 签名后替换应用）；完成后需手动重启应用。 */
 export async function downloadAndInstall(
   onProgress: (p: UpdateProgress) => void,
+  proxy?: string,
 ): Promise<void> {
   const { check } = await import("@tauri-apps/plugin-updater");
-  const update = await check({ timeout: 15000 });
+  const update = await check({ timeout: 15000, ...(proxy ? { proxy } : {}) });
   if (!update) throw new Error("更新已不可用，请重新检查");
   let total: number | null = null;
   let downloaded = 0;

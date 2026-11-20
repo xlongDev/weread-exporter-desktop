@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: https://res.weread.qq.com https://cdn.weread.qq.com https://pica.zhimg.com https://*.image.myqcloud.com https://rescdn.qqmail.com; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost",
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: https://res.weread.qq.com https://cdn.weread.qq.com https://pica.zhimg.com https://*.image.myqcloud.com https://rescdn.qqmail.com; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost https://api.github.com",
       "assetProtocol": {
         "enable": true,
         "scope": [

@@ -61,6 +61,7 @@ export function Settings() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus>({ status: "idle" });
   const [namingDraft, setNamingDraft] = useState("");
+  const [proxyDraft, setProxyDraft] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -76,6 +77,8 @@ export function Settings() {
   useEffect(() => {
     const v = settings?.["export.naming"];
     setNamingDraft(typeof v === "string" ? v : "");
+    const pv = settings?.["general.update_proxy"];
+    setProxyDraft(typeof pv === "string" ? pv : "");
   }, [settings]);
 
   async function write(key: string, value: unknown, label: string) {
@@ -130,7 +133,8 @@ export function Settings() {
   async function checkUpdate() {
     setUpdate({ status: "checking" });
     // 优先应用内更新端点（updater + minisign 校验）；latest.json 未挂上时回退 GitHub API 比对
-    const via = await checkViaUpdater();
+    const proxy = proxyDraft.trim() || undefined;
+    const via = await checkViaUpdater(proxy);
     if (via.kind === "available") {
       setUpdate({ status: "available", tag: via.version, url: null });
       return;
@@ -154,7 +158,7 @@ export function Settings() {
   async function installUpdate() {
     setUpdate({ status: "downloading", downloaded: 0, total: null });
     try {
-      await downloadAndInstall((p) => setUpdate({ status: "downloading", ...p }));
+      await downloadAndInstall((p) => setUpdate({ status: "downloading", ...p }), proxyDraft.trim() || undefined);
       setUpdate({ status: "installed" });
     } catch {
       setUpdate({ status: "error" });
@@ -401,6 +405,22 @@ export function Settings() {
               </>
             )}
           </FieldRow>
+          <FieldRow label={t("更新代理")}>
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <input
+                value={proxyDraft}
+                onChange={(e) => setProxyDraft(e.target.value)}
+                onBlur={() => void saveProxy()}
+                onKeyDown={(e) => e.key === "Enter" && void saveProxy()}
+                placeholder={t("留空直连；代理用户填 http://127.0.0.1:7897 这类地址")}
+                spellCheck={false}
+                className="input-glass h-9 w-full rounded-full px-3.5 text-sm outline-none placeholder:text-faint"
+                aria-label={t("更新代理")}
+              />
+              <span className="text-xs text-faint">{t("应用内更新的下载通道不走系统代理，需在此显式填写。")}</span>
+            </div>
+            {saved === "update_proxy" && <SavedStamp />}
+          </FieldRow>
           <FieldRow label={t("诊断信息")}>
             <span className="min-w-0 flex-1 text-sm text-muted">
               {t("复制版本、近期失败任务与应用日志（已脱敏），问题反馈时附上可加快定位。")}
@@ -441,6 +461,12 @@ export function Settings() {
       </div>
     </div>
   );
+
+  async function saveProxy() {
+    const savedValue = typeof settings?.["general.update_proxy"] === "string" ? (settings?.["general.update_proxy"] as string) : "";
+    if (proxyDraft.trim() === savedValue.trim()) return;
+    await write("general.update_proxy", proxyDraft.trim(), "update_proxy");
+  }
 
   async function saveNaming() {
     const savedValue = typeof settings?.["export.naming"] === "string" ? (settings?.["export.naming"] as string) : "";

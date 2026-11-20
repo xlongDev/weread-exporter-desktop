@@ -16,6 +16,7 @@ const SETTING_KEYS: &[&str] = &[
     "general.default_format",
     "general.theme",
     "general.language",
+    "general.update_proxy",
     "export.naming",
     "export.overwrite",
     "export.save_cover",
