@@ -4,13 +4,13 @@
 
 ## 当前阶段
 
-**v0.1.10 已正式发布（2026-11-20）**：https://github.com/xlongDev/weread-exporter-desktop/releases/tag/v0.1.10 —— 10 件资产（三平台安装包 + 三平台 updater 签名更新包 + SHA256SUMS + latest.json）。本版内容：书架划线汇总（多本划线/想法合并一个 MD）、排版一键预设（e-ink/手机/打印）、书架分组分区、**修想法端点只认数字 bookId 的既有 bug**（「笔记」格式对书架导入的书此前必失败）；连同 11-20 批次 1：书架一键导入、「笔记」第 4 格式、排版选项、macOS 原生红绿灯与 UI 打磨、封面 CSP 补全等 5 项修复。
+**v0.1.11 已正式发布（2026-11-21）**：https://github.com/xlongDev/weread-exporter-desktop/releases/tag/v0.1.11 —— 10 件资产。内容：连载书更新导出（书库「更新导出」，force=增量语义：重开最新目录比对，有新章节断点续抓、无更新秒级重渲染）+ 英文界面（中文原文 key 轻量 i18n，215 条全覆盖，设置 → 外观 → 语言切换）。updater 链路 v0.1.10 起已激活。
 
-**应用内更新已激活**：仓库 secret `TAURI_SIGNING_PRIVATE_KEY` 已配，v0.1.10 Release 已挂 `latest.json`（三平台 .app.tar.gz/.exe + minisign .sig，`scripts/make-latest-json.py` 生成）。旧版用户检查更新可发现新版并应用内安装；更新链路真机验证待做。
+**v0.1.10（2026-11-20）**：书架划线汇总、排版预设、书架分组分区、修想法端点只认数字 bookId 的既有 bug；连同批次 1：书架一键导入、「笔记」第 4 格式、排版选项、macOS 原生红绿灯与 UI 打磨、封面 CSP 补全等 5 项修复。
 
-**门禁基线**：pytest 74 · cargo 21 · vitest 40 · tsc strict + clippy -D warnings 全绿。CI run 44594200805 全绿。
+**门禁基线**：pytest 74 · cargo 21 · vitest 40 · tsc strict + clippy -D warnings 全绿。
 
-**待真机验收**：书架划线汇总 UI 全链路（账号无划线数据，真实拉取待用户日常确认）；应用内更新链路（旧版 → 检查更新 → 安装 → 重启）；Windows 真机安装；Intel macOS 真机运行。
+**待真机验收**：更新导出增量续抓（连载书实测）；英文界面真机过一遍；书架划线汇总（账号无划线数据）；应用内更新链路（0.1.10 → 0.1.11 正好可验）；Windows/Intel 真机。
 
 ## CI/CD（已上线）
 
